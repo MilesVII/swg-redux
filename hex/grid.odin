@@ -18,6 +18,7 @@ CellPosition :: struct {
 
 Cell :: struct($Value: typeid) {
 	position: CellPosition,
+	vertesex: [6]rl.Vector2,
 	visible: bool,
 	value: Value
 }
@@ -54,6 +55,7 @@ grid :: proc(radius: int, $Value: typeid) -> Grid(Value) {
 				world = axialToWorld(axial),
 				index = index
 			},
+			vertesex = vertesex(axial),
 			visible = distance({0, 0}, axial) <= radius
 		}
 	}}
@@ -68,31 +70,24 @@ getGridSide :: proc(radius: int) -> int {
 	return radius * 2 + 1
 }
 
-// getAxialDisplacement :: proc(y: int) -> int {
-// 	return y / 2;
-// }
-
 	//   2
 	// 3/ \1
 	//  | |
 	// 4\ /0
 	//   5
 
-vertesex :: proc(position: Axial, full: bool) -> [6]rl.Vector2 {
-	ray := rl.Vector2 {0, 0.57735026919 /* 1 / sqrt(3) */ }
-	if !full {
-		ray *= .9
-	} else do ray *= 1.1
+vertesex :: proc(position: Axial) -> [6]rl.Vector2 {
+	ray := rl.Vector2 {0, 1.0 / math.sqrt(f32(3)) }
 
-	sixty : f32 = utils.TAU / 6.0
+	sixty : f32 = -utils.TAU / 6.0
 
 	zero := [6]rl.Vector2 {
 		ray,
-		rl.Vector2Rotate(ray, -sixty),
-		rl.Vector2Rotate(ray, -sixty * 2),
-		rl.Vector2Rotate(ray, -sixty * 3),
-		rl.Vector2Rotate(ray, -sixty * 4),
-		rl.Vector2Rotate(ray, -sixty * 5),
+		rl.Vector2Rotate(ray, sixty),
+		rl.Vector2Rotate(ray, sixty * 2),
+		rl.Vector2Rotate(ray, sixty * 3),
+		rl.Vector2Rotate(ray, sixty * 4),
+		rl.Vector2Rotate(ray, sixty * 5),
 	}
 
 	displacement := BASIS_X * f32(position.x) + BASIS_Y * f32(position.y)
@@ -112,20 +107,6 @@ distance :: proc(a: Axial, b: Axial) -> int {
 	c := a - b;
 	return (abs(c.x) + abs(c.x + c.y) + abs(c.y)) / 2
 }
-
-// offsetToAxial :: proc (v: Offset) -> Axial {
-// 	return Axial {
-// 		v.x - getAxialDisplacement(v.y),
-// 		v.y
-// 	}
-// }
-
-// axialToOffset :: proc (v: Axial) -> Offset {
-// 	return Offset {
-// 		v.x + getAxialDisplacement(v.y),
-// 		v.y
-// 	}
-// }
 
 axialToWorld :: proc (v: Axial) -> rl.Vector2 {
 	return BASIS_X * f32(v.x) + BASIS_Y * f32(v.y)

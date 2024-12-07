@@ -5,7 +5,7 @@ import "hex"
 import "core:fmt"
 import "utils"
 
-MAP_RADIUS :: 64
+MAP_RADIUS :: 16
 HEIGHTS :: 11
 
 grid := hex.grid(MAP_RADIUS, hex.GridCell)
@@ -49,12 +49,8 @@ draw :: proc() {
 	pointedCell := hex.worldToAxial(pointer)
 	for cell in grid.cells {
 		if cell.visible {
-			drawHex(
-				cell.position.axial,
-				cell.value.color,
-				pointedCell == cell.position.axial
-			)
-			// if cell.value.mainArea && rl.IsMouseButtonDown(rl.MouseButton.LEFT) do drawHex(cell.position.axial, rl.MAGENTA)
+			vertesex := cell.vertesex;
+			rl.DrawTriangleFan(&vertesex[0], 6, cell.value.color)
 		}
 	}
 	
@@ -62,9 +58,4 @@ draw :: proc() {
 
 	rl.DrawText(fmt.ctprint(pointedCell), 0, 0, 8, rl.RED)
 	rl.DrawText(fmt.ctprint(1.0 / rl.GetFrameTime()), 0, 8, 8, rl.RED)
-}
-
-drawHex :: proc(at: hex.Axial, color: rl.Color, full: bool) {
-	vertesex := hex.vertesex(at, full)[0];
-	rl.DrawTriangleFan(&vertesex, 7, color)
 }
