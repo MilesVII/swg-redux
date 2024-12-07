@@ -48,9 +48,21 @@ draw :: proc() {
 
 	pointedCell := hex.worldToAxial(pointer)
 	for cell in grid.cells {
-		if cell.visible {
-			vertesex := cell.vertesex;
-			rl.DrawTriangleFan(&vertesex[0], 6, cell.value.color)
+		// if cell.visible {
+		// 	vertesex := cell.vertesex;
+		// 	rl.DrawTriangleFan(&vertesex[0], 6, cell.value.color)
+		// }
+
+		//fmt.println(hex.vertesex({0, 0}))
+
+		lines := hex.outline({
+			{0, 0},
+			{0, 1},
+			{1, 1}
+		})
+
+		for line in lines {
+			rl.DrawLineV(line[0], line[1], rl.MAGENTA)
 		}
 	}
 	

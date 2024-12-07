@@ -4,7 +4,6 @@ import rl "vendor:raylib"
 import "hex"
 import "core:fmt"
 import "utils"
-import nbn "nbnet"
 
 WINDOW :: [2]i32 {640, 480}
 

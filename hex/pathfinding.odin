@@ -4,15 +4,6 @@ import "core:fmt"
 
 Area :: [dynamic]CellPosition
 
-AXIAL_NBS :: [?]Axial {
-	Axial{1, 0},
-	Axial{0, 1},
-	Axial{-1, 1},
-	Axial{-1, 0},
-	Axial{0, -1},
-	Axial{1, -1}
-}
-
 WalkableCell :: struct {
 	areaId: int
 }

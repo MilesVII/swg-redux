@@ -4,10 +4,27 @@ import rl "vendor:raylib"
 import "core:math"
 import "../utils"
 
+import "core:fmt"
+
 Axial :: [2]int
+
+//   2
+// 3/ \1
+//  | |
+// 4\ /0
+//   5
 
 BASIS_X :: rl.Vector2{1.0, 0}
 BASIS_Y :: rl.Vector2{0.5, 0.86602540378}
+
+AXIAL_NBS :: [?]Axial {
+	Axial{1, 0},
+	Axial{1, -1},
+	Axial{0, -1},
+	Axial{-1, 0},
+	Axial{-1, 1},
+	Axial{0, 1}
+}
 
 CellPosition :: struct {
 	axial: Axial,
@@ -70,16 +87,11 @@ getGridSide :: proc(radius: int) -> int {
 	return radius * 2 + 1
 }
 
-	//   2
-	// 3/ \1
-	//  | |
-	// 4\ /0
-	//   5
-
 vertesex :: proc(position: Axial) -> [6]rl.Vector2 {
 	ray := rl.Vector2 {0, 1.0 / math.sqrt(f32(3)) }
 
 	sixty : f32 = -utils.TAU / 6.0
+	ray = rl.Vector2Rotate(ray, sixty)
 
 	zero := [6]rl.Vector2 {
 		ray,
@@ -136,4 +148,40 @@ worldToAxial :: proc (v: rl.Vector2) -> Axial {
 axialToIndex :: proc (v: Axial, radius: int) -> int {
 	t := v + Axial { radius, radius }
 	return t.y * getGridSide(radius) + t.x
+}
+
+Line :: [2]rl.Vector2
+
+outline :: proc (cells: []Axial) -> []Line {
+	lines : [dynamic]Line
+
+	for cell, cellIndex in cells {
+		vx := vertesex(cell)
+		for nhb, index in AXIAL_NBS {
+			target := cell + nhb
+			nhbFound := false
+			
+			for tested, testIndex in cells {
+				if (cellIndex == testIndex) do continue
+				if tested == target {
+					nhbFound = true
+					break
+				}
+			}
+
+			if !nhbFound {
+				newIndesex := [2]int {index, index + 1}
+				if index == 5 do newIndesex[1] = 0
+
+				line := Line {
+					vx[newIndesex[0]],
+					vx[newIndesex[1]]
+				}
+
+				append(&lines, line)
+			}
+		}
+	}
+
+	return lines[:]
 }
