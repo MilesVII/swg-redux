@@ -87,8 +87,8 @@ getGridSide :: proc(radius: int) -> int {
 	return radius * 2 + 1
 }
 
-vertesex :: proc(position: Axial) -> [6]rl.Vector2 {
-	ray := rl.Vector2 {0, 1.0 / math.sqrt(f32(3)) }
+vertesex :: proc(position: Axial, scale : f32 = 1) -> [6]rl.Vector2 {
+	ray := rl.Vector2 {0, 1.0 / math.sqrt(f32(3)) } * scale
 
 	sixty : f32 = -utils.TAU / 6.0
 	ray = rl.Vector2Rotate(ray, sixty)
@@ -150,13 +150,15 @@ axialToIndex :: proc (v: Axial, radius: int) -> int {
 	return t.y * getGridSide(radius) + t.x
 }
 
-Line :: [2]rl.Vector2
+Line :: [4]rl.Vector2
 
-outline :: proc (cells: []Axial) -> []Line {
+outline :: proc (cells: []Axial, thickness := f32(.2)) -> []Line {
 	lines : [dynamic]Line
 
 	for cell, cellIndex in cells {
 		vx := vertesex(cell)
+		vxOuter := vertesex(cell, 1 + thickness)
+
 		for nhb, index in AXIAL_NBS {
 			target := cell + nhb
 			nhbFound := false
@@ -175,7 +177,9 @@ outline :: proc (cells: []Axial) -> []Line {
 
 				line := Line {
 					vx[newIndesex[0]],
-					vx[newIndesex[1]]
+					vxOuter[newIndesex[0]],
+					vxOuter[newIndesex[1]],
+					vx[newIndesex[1]],
 				}
 
 				append(&lines, line)
