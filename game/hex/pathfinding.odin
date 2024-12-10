@@ -2,55 +2,47 @@ package hex
 
 import "core:fmt"
 
-Area :: [dynamic]CellPosition
+Area :: [dynamic]Axial
 Path :: []Axial
 
-WalkableCell :: struct {
-	areaId: int
-}
-
 markWalkableAreas :: proc(grid: Grid(GridCell)) {
-	gridSize := len(grid.cells)
-	gridMap := make([]WalkableCell, gridSize)
+	gridMap := make(map[Axial]int)
 	defer delete(gridMap)
-	for &gridCell in gridMap do gridCell.areaId = -1
 
 	areas : [dynamic]Area
-	pool : [dynamic]CellPosition
+	shockwave : [dynamic]Axial
 
 	for &cell, index in grid.cells {
 		cell.value.mainArea = false
+		_, areaMarked := gridMap[index]
 
-		if cell.value.walkable && gridMap[index].areaId == -1 {
-			areaId := len(areas)
-			newArea : Area
+		if !cell.value.walkable || areaMarked do continue
+		
+		areaId := len(areas)
+		newArea : Area
 
-			gridMap[index].areaId = areaId
-			append(&pool, cell.position)
+		gridMap[index] = areaId
+		append(&shockwave, cell.position.axial)
 
-			for len(pool) > 0 {
-				origin := pop(&pool)
-				append(&newArea, origin)
+		for len(shockwave) > 0 {
+			origin := pop(&shockwave)
+			append(&newArea, origin)
 
-				for nb in AXIAL_NBS {
-					tested := nb + origin.axial
-					if !isWithinGrid(tested, grid.radius) do continue
+			for nb in AXIAL_NBS {
+				tested := nb + origin
+				if !cellIsWalkable(tested, grid) do continue
 
-					testedIndex := axialToIndex(tested, grid.radius)
-					testedCell := grid.cells[testedIndex]
-					assert(testedCell.position.axial == tested)
+				_, testedMarked := gridMap[tested]
 
-					if testedCell.value.walkable && gridMap[testedIndex].areaId == -1 {
-						gridMap[testedIndex].areaId = areaId
-						append(&pool, testedCell.position)
-					}
+				if !testedMarked {
+					gridMap[tested] = areaId
+					append(&shockwave, tested)
 				}
 			}
-			append(&areas, newArea)
-			fmt.println(len(newArea))
-
-			areaId += 1
 		}
+		append(&areas, newArea)
+
+		areaId += 1
 	}
 
 	biggestAreaIx := -1
@@ -63,8 +55,9 @@ markWalkableAreas :: proc(grid: Grid(GridCell)) {
 
 	if (biggestAreaIx >= 0) {
 		for position in areas[biggestAreaIx] {
-			grid.cells[position.index].value.mainArea = true
+			grid.cells[axialToIndex(position, grid.radius)].value.mainArea = true
 		}
+		fmt.println("marked ", len(areas[biggestAreaIx]), " cells as mainArea")
 	}
 }
 

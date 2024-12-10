@@ -94,7 +94,6 @@ draw :: proc() {
 	walkables, ok := hex.findPath(grid, {0, 0}, pointedCell)
 	if ok {
 		outline := hex.outline(walkables, .5)
-		fmt.println(len(outline))
 		drawOutline(outline)
 	}
 
