@@ -82,26 +82,31 @@ draw :: proc() {
 	rl.BeginMode2D(camera)
 
 	pointedCell := hex.worldToAxial(pointer)
+
 	for cell in grid.cells {
 		if cell.visible {
 			vertesex := cell.vertesex;
 			rl.DrawTriangleFan(&vertesex[0], 6, cell.value.color)
 		}
-		
-		lines := hex.outline({
-			{0, 0},
-			{0, 1},
-			{1, 1}
-		})
-
-		for line in lines {
-			vx := line
-			rl.DrawTriangleFan(&vx[0], 4, rl.MAGENTA)
-		}
 	}
 	
+	// walkables := hex.findWalkableOutline(grid, pointedCell, 3)
+	walkables, ok := hex.findPath(grid, {0, 0}, pointedCell)
+	if ok {
+		outline := hex.outline(walkables, .5)
+		fmt.println(len(outline))
+		drawOutline(outline)
+	}
+
 	rl.EndMode2D()
 
 	rl.DrawText(fmt.ctprint(pointedCell), 0, 0, 8, rl.RED)
 	rl.DrawText(fmt.ctprint(1.0 / rl.GetFrameTime()), 0, 8, 8, rl.RED)
+}
+
+drawOutline :: proc(outline: []hex.Line) {
+	for line in outline {
+		vx := line
+		rl.DrawTriangleFan(&vx[0], 4, rl.BLACK)
+	}
 }

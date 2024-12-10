@@ -17,7 +17,7 @@ Axial :: [2]int
 BASIS_X :: rl.Vector2{1.0, 0}
 BASIS_Y :: rl.Vector2{0.5, 0.86602540378}
 
-AXIAL_NBS :: [?]Axial {
+AXIAL_NBS := [?]Axial {
 	Axial{1, 0},
 	Axial{1, -1},
 	Axial{0, -1},
@@ -73,7 +73,7 @@ grid :: proc(radius: int, $Value: typeid) -> Grid(Value) {
 				index = index
 			},
 			vertesex = vertesex(axial),
-			visible = distance({0, 0}, axial) <= radius
+			visible = isWithinGrid(axial, radius)
 		}
 	}}
 
@@ -113,11 +113,8 @@ vertesex :: proc(position: Axial, scale : f32 = 1) -> [6]rl.Vector2 {
 }
 
 distance :: proc(a: Axial, b: Axial) -> int {
-	a := a
-	b := b
-
-	c := a - b;
-	return (abs(c.x) + abs(c.x + c.y) + abs(c.y)) / 2
+	v := a - b
+	return (abs(a.x) + abs(a.x + a.y) + abs(a.y)) / 2
 }
 
 axialToWorld :: proc (v: Axial) -> rl.Vector2 {
@@ -145,47 +142,11 @@ worldToAxial :: proc (v: rl.Vector2) -> Axial {
 	}
 }
 
-axialToIndex :: proc (v: Axial, radius: int) -> int {
+axialToIndex :: proc(v: Axial, radius: int) -> int {
 	t := v + Axial { radius, radius }
 	return t.y * getGridSide(radius) + t.x
 }
 
-Line :: [4]rl.Vector2
-
-outline :: proc (cells: []Axial, thickness := f32(.2)) -> []Line {
-	lines : [dynamic]Line
-
-	for cell, cellIndex in cells {
-		vx := vertesex(cell)
-		vxOuter := vertesex(cell, 1 + thickness)
-
-		for nhb, index in AXIAL_NBS {
-			target := cell + nhb
-			nhbFound := false
-			
-			for tested, testIndex in cells {
-				if (cellIndex == testIndex) do continue
-				if tested == target {
-					nhbFound = true
-					break
-				}
-			}
-
-			if !nhbFound {
-				newIndesex := [2]int {index, index + 1}
-				if index == 5 do newIndesex[1] = 0
-
-				line := Line {
-					vx[newIndesex[0]],
-					vxOuter[newIndesex[0]],
-					vxOuter[newIndesex[1]],
-					vx[newIndesex[1]],
-				}
-
-				append(&lines, line)
-			}
-		}
-	}
-
-	return lines[:]
+isWithinGrid :: proc(cell: Axial, gridRadius: int) -> bool {
+	return distance(cell, {0, 0}) <= gridRadius
 }
