@@ -92,7 +92,7 @@ findPath :: proc(grid: Grid(GridCell), from: Axial, to: Axial) -> (Path, bool) {
 		minIndex := 0
 		minHeur := 1000000
 		for cell, index in shockwave {
-			d := distance(cell, to)
+			d := gridMap[cell].distance
 			if d < minHeur {
 				minIndex = index
 				minHeur = d
