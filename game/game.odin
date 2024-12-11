@@ -22,8 +22,10 @@ colors : [HEIGHTS]rl.Color = {
 	{154, 66, 66, 255}
 }
 
+GameGrid :: hex.Grid(hex.GridCell)
+
 GameState :: struct {
-	grid: hex.Grid(hex.GridCell)
+	grid: GameGrid
 }
 
 createGame :: proc() -> GameState {

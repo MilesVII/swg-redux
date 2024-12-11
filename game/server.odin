@@ -15,6 +15,7 @@ Message :: enum { JOIN, UPDATE_GRID, UPDATE_UNIT, SUBMIT }
 GamePackage :: struct {
 	message: Message,
 	me: uuid.Identifier,
+	grid: GameGrid
 }
 
 Player :: struct {
@@ -25,7 +26,8 @@ Player :: struct {
 Session :: struct {
 	started: bool,
 	activePlayerIx: int,
-	players: [2]Maybe(Player)
+	players: [2]Maybe(Player),
+	game: GameState
 }
 
 wg : sync.Wait_Group
@@ -43,7 +45,7 @@ server :: proc() {
 		activePlayerIx = -1,
 		players = { nil, nil }
 	}
-	game := createGame()
+	session.game = createGame()
 	
 	sync.wait_group_add(&wg, 2)
 	waitForClients()
@@ -104,6 +106,11 @@ onJoin :: proc(player: uuid.Identifier) -> bool {
 	player0, player0Connected := session.players[0].?
 	if player0Connected && player0.id == nil {
 		player0.id = player
+		gridPayload := GamePackage {
+			message = Message.UPDATE_GRID,
+			grid = session.game.grid
+		}
+		networking.say(GamePackage, &gridPayload, player0.socket)
 		return true
 	}
 

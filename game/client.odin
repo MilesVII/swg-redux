@@ -20,13 +20,26 @@ camera := rl.Camera2D {
 	zoom = 20.0,
 }
 pointer: rl.Vector2
-serverSocket: net.TCP_Socket
+pointedCell: hex.Axial
+
+ClientStatus :: enum {
+	CONNECTING, LOBBY, WAITING, PLAYING, FINISH
+}
+
+ClientState :: struct {
+	grid: GameGrid,
+	serverSocket: net.TCP_Socket,
+	status: ClientStatus
+}
+
+clientState := ClientState {
+	status = .CONNECTING
+}
 
 client :: proc() {
 	rl.InitWindow(WINDOW.x, WINDOW.y, "SWGRedux")
 	defer rl.CloseWindow()
 
-	// rl.SetConfigFlags(rl.ConfigFlags{rl.ConfigFlag.MSAA_4X_HINT})
 	rl.SetTargetFPS(240)
 
 	me := connect()
@@ -34,7 +47,7 @@ client :: proc() {
 	for !rl.WindowShouldClose() { // Detect window close button or ESC key
 		updateIO()
 		// update()
-		// draw()
+		draw()
 	}
 }
 
@@ -44,59 +57,53 @@ updateIO :: proc() {
 	if rl.IsKeyDown(rl.KeyboardKey.RIGHT) do camera.zoom += 0.1
 	else if rl.IsKeyDown(rl.KeyboardKey.LEFT) do camera.zoom -= 0.1
 	if camera.zoom < .1 do camera.zoom = .1
+	
+	pointedCell = hex.worldToAxial(pointer)
 }
 
-// draw :: proc() {
-// 	rl.BeginDrawing()
-// 	defer rl.EndDrawing()
+draw :: proc() {
+	rl.BeginDrawing()
+	defer rl.EndDrawing()
 
-// 	rl.ClearBackground(rl.RAYWHITE)
+	rl.ClearBackground(rl.RAYWHITE)
+
+	rl.BeginMode2D(camera)
+
+	if clientState.status != .CONNECTING do drawGrid()
+
+	rl.EndMode2D()
+
+	rl.DrawText(fmt.ctprint(pointedCell), 0, 0, 8, rl.RED)
+	rl.DrawText(fmt.ctprint(1.0 / rl.GetFrameTime()), 0, 8, 8, rl.RED)
+}
+
+drawGrid :: proc() {
+	for cell in clientState.grid.cells {
+		if cell.visible {
+			vertesex := cell.vertesex;
+			rl.DrawTriangleFan(&vertesex[0], 6, cell.value.color)
+		}
+	}
 	
-// 	rl.BeginMode2D(camera)
+	// walkables := hex.findWalkableOutline(grid, pointedCell, 3)
+	walkables, ok := hex.findPath(clientState.grid, {0, 0}, pointedCell)
+	if ok {
+		outline := hex.outline(walkables, .5)
+		drawOutline(outline)
+	}
+}
 
-// 	pointedCell := hex.worldToAxial(pointer)
-
-// 	for cell in grid.cells {
-// 		if cell.visible {
-// 			vertesex := cell.vertesex;
-// 			rl.DrawTriangleFan(&vertesex[0], 6, cell.value.color)
-// 		}
-// 	}
-	
-// 	// walkables := hex.findWalkableOutline(grid, pointedCell, 3)
-// 	walkables, ok := hex.findPath(grid, {0, 0}, pointedCell)
-// 	if ok {
-// 		outline := hex.outline(walkables, .5)
-// 		drawOutline(outline)
-// 	}
-
-// 	rl.EndMode2D()
-
-// 	rl.DrawText(fmt.ctprint(pointedCell), 0, 0, 8, rl.RED)
-// 	rl.DrawText(fmt.ctprint(1.0 / rl.GetFrameTime()), 0, 8, 8, rl.RED)
-// }
-
-// drawOutline :: proc(outline: []hex.Line) {
-// 	for line in outline {
-// 		vx := line
-// 		rl.DrawTriangleFan(&vx[0], 4, rl.BLACK)
-// 	}
-// }
-
-@(private)
-onPackage :: proc(data: GamePackage) {
-	switch data.message {
-		case .JOIN:
-		case .UPDATE_GRID:
-		case .UPDATE_UNIT:
-		case .SUBMIT:
+drawOutline :: proc(outline: []hex.Line) {
+	for line in outline {
+		vx := line
+		rl.DrawTriangleFan(&vx[0], 4, rl.BLACK)
 	}
 }
 
 @(private)
 connect :: proc() -> uuid.Identifier {
 	context.random_generator = crypto.random_generator()
-	serverSocket := networking.dial()
+	clientState.serverSocket = networking.dial()
 	me := uuid.generate_v4()
 
 	startListening()
@@ -105,7 +112,7 @@ connect :: proc() -> uuid.Identifier {
 		message = Message.JOIN,
 		me = me
 	}
-	networking.say(GamePackage, &joinMessage, serverSocket)
+	networking.say(GamePackage, &joinMessage, clientState.serverSocket)
 
 	return me
 }
@@ -117,14 +124,14 @@ startListening :: proc() {
 			fmt.printfln("server said %s", data.message)
 			switch data.message {
 				case .JOIN:
-					onJoin(data.me)
 				case .UPDATE_GRID:
+					clientState.grid = data.grid
 				case .UPDATE_UNIT:
 				case .SUBMIT:
 			}
 		}
 
-		networking.listen(GamePackage, onPackage, serverSocket)
+		networking.listen(GamePackage, onPackage, clientState.serverSocket)
 	}
 
 	t := thread.create(listener)
