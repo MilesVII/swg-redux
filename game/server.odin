@@ -3,7 +3,7 @@ package game
 import "core:fmt"
 import "core:net"
 import "core:thread"
-// import "core:sync"
+import "core:sync"
 
 import "networking"
 import "core:encoding/uuid"
@@ -17,11 +17,18 @@ GamePackage :: struct {
 	me: uuid.Identifier,
 }
 
+Player :: struct {
+	id: Maybe(uuid.Identifier),
+	socket: net.TCP_Socket
+}
+
 Session :: struct {
 	started: bool,
 	activePlayerIx: int,
-	players: [2]Maybe(uuid.Identifier)
+	players: [2]Maybe(Player)
 }
+
+wg : sync.Wait_Group
 
 // GameState :: struct {
 // 	visible units
@@ -38,23 +45,26 @@ server :: proc() {
 	}
 	game := createGame()
 	
-	listenToClient()
+	sync.wait_group_add(&wg, 2)
+	waitForClients()
 	// startThread(0)
+	sync.wait_group_wait(&wg)
 }
 
-// @(private)
-// startThread :: proc(userIndex: int) {
-// 	t := thread.create(listenToClient)
-// 	if t != nil {
-// 		t.init_context = context
-// 		t.user_index = userIndex
-// 		thread.start(t)
-// 	}
-// }
+@(private)
+startThread :: proc(userIndex: int) {
+	t := thread.create(clientWorker)
+	if t != nil {
+		t.init_context = context
+		t.user_index = userIndex
+		thread.start(t)
+	}
+}
 
 @(private)
-listenToClient :: proc(/* t: ^thread.Thread */) {
+clientWorker :: proc(t: ^thread.Thread) {
 	onPackage :: proc(data: GamePackage) {
+		fmt.printfln("player %s said %s", data.me, data.message)
 		switch data.message {
 			case .JOIN:
 				onJoin(data.me)
@@ -64,7 +74,24 @@ listenToClient :: proc(/* t: ^thread.Thread */) {
 		}
 	}
 
-	networking.listen(GamePackage, onPackage, socket)
+	player, ok := session.players[t.user_index].?
+	assert(ok, "client socket not registered")
+	networking.listen(GamePackage, onPackage, player.socket)
+
+	sync.wait_group_done(&wg)
+}
+
+@(private)
+waitForClients :: proc() {
+	client0 := networking.waitForClient(socket)
+	fmt.println("player0 connected")
+	session.players[0] = Player { nil, client0 }
+	startThread(0)
+
+	client1 := networking.waitForClient(socket)
+	fmt.println("player1 connected")
+	session.players[1] = Player { nil, client1 }
+	startThread(1)
 }
 
 @(private)
@@ -74,12 +101,16 @@ onJoin :: proc(player: uuid.Identifier) -> bool {
 		return false
 	}
 
-	if session.players[0] == nil {
-		session.players[0] = player
+	player0, player0Connected := session.players[0].?
+	if player0Connected && player0.id == nil {
+		player0.id = player
 		return true
 	}
-	if session.players[1] == nil {
-		session.players[1] = player
+
+	
+	player1, player1Connected := session.players[0].?
+	if player1Connected && player1.id == nil {
+		player1.id = player
 		session.started = true
 		// notify both players and start the game
 		return true

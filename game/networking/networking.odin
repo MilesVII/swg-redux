@@ -29,17 +29,21 @@ dial :: proc() -> net.TCP_Socket {
 	return socket
 }
 
-listen :: proc($GamePackage: typeid, onPackage: proc(payload: GamePackage), socket: net.TCP_Socket) {
+waitForClient :: proc(socket: net.TCP_Socket) -> net.TCP_Socket {
 	clientSocket, clientEndpoint, acceptErr := net.accept_tcp(socket)
 
 	if acceptErr != nil {
 		fmt.panicf("%s",acceptErr)
 	}
 
+	return clientSocket
+}
+
+listen :: proc($GamePackage: typeid, onPackage: proc(payload: GamePackage), socket: net.TCP_Socket) {
 	gamePackage: GamePackage
 
 	for {
-		status := readPackage(GamePackage, &gamePackage, clientSocket)
+		status := readPackage(GamePackage, &gamePackage, socket)
 		if status == PackageType.EXIT do break
 		if status == PackageType.ERROR do break
 		if status == PackageType.GAME do onPackage(gamePackage)

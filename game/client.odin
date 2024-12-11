@@ -4,7 +4,9 @@ import rl "vendor:raylib"
 import "hex"
 import "core:fmt"
 import "core:net"
+import "core:thread"
 import "core:encoding/uuid"
+import "core:crypto"
 import "utils"
 import "networking"
 
@@ -17,7 +19,8 @@ camera := rl.Camera2D {
 	rotation = 0.0,
 	zoom = 20.0,
 }
-pointer : rl.Vector2
+pointer: rl.Vector2
+serverSocket: net.TCP_Socket
 
 client :: proc() {
 	rl.InitWindow(WINDOW.x, WINDOW.y, "SWGRedux")
@@ -92,17 +95,43 @@ onPackage :: proc(data: GamePackage) {
 
 @(private)
 connect :: proc() -> uuid.Identifier {
-	socket := networking.dial()
+	context.random_generator = crypto.random_generator()
+	serverSocket := networking.dial()
 	me := uuid.generate_v4()
 
-	networking.listen(GamePackage, onPackage, socket)
+	startListening()
 
 	joinMessage := GamePackage {
 		message = Message.JOIN,
 		me = me
 	}
-	networking.say(GamePackage, &joinMessage, socket)
+	networking.say(GamePackage, &joinMessage, serverSocket)
 
 	return me
+}
+
+@(private)
+startListening :: proc() {
+	listener :: proc(t: ^thread.Thread) {
+		onPackage :: proc(data: GamePackage) {
+			fmt.printfln("server said %s", data.message)
+			switch data.message {
+				case .JOIN:
+					onJoin(data.me)
+				case .UPDATE_GRID:
+				case .UPDATE_UNIT:
+				case .SUBMIT:
+			}
+		}
+
+		networking.listen(GamePackage, onPackage, serverSocket)
+	}
+
+	t := thread.create(listener)
+	if t != nil {
+		t.init_context = context
+		t.user_index = 0
+		thread.start(t)
+	}
 }
 
