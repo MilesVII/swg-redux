@@ -108,11 +108,11 @@ connect :: proc() -> uuid.Identifier {
 
 	startListening()
 
-	joinMessage := GamePackage {
-		message = Message.JOIN,
+	header := networking.MessageHeader {
+		message = .JOIN,
 		me = me
 	}
-	networking.say(GamePackage, &joinMessage, clientState.serverSocket)
+	networking.say(clientState.serverSocket, &header)
 
 	return me
 }
@@ -120,18 +120,18 @@ connect :: proc() -> uuid.Identifier {
 @(private)
 startListening :: proc() {
 	listener :: proc(t: ^thread.Thread) {
-		onPackage :: proc(data: GamePackage) {
-			fmt.printfln("server said %s", data.message)
-			switch data.message {
+		onPackage :: proc(header: networking.MessageHeader, payload: string) {
+			fmt.printfln("server said %s: %s bytes", header.message, len(payload))
+			switch header.message {
 				case .JOIN:
-				case .UPDATE_GRID:
-					clientState.grid = data.grid
-				case .UPDATE_UNIT:
+				case .UPDATE:
+					clientState.grid = hex.jsonToGrid(payload)
+					clientState.status = .LOBBY
 				case .SUBMIT:
 			}
 		}
 
-		networking.listen(GamePackage, onPackage, clientState.serverSocket)
+		networking.listenBlocking(onPackage, clientState.serverSocket)
 	}
 
 	t := thread.create(listener)

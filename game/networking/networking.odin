@@ -3,9 +3,18 @@ package networking
 import "core:net"
 import "core:mem"
 import "core:slice"
+import "core:encoding/uuid"
 import "core:fmt"
+import "core:strings"
 
 PORT :: 8000
+
+Message :: enum { JOIN, UPDATE, SUBMIT }
+MessageHeader :: struct {
+	message: Message,
+	me: uuid.Identifier,
+	payloadSize: u32
+}
 
 openServerSocket :: proc() -> net.TCP_Socket {
 	socket, err := net.listen_tcp(net.Endpoint{
@@ -39,63 +48,53 @@ waitForClient :: proc(socket: net.TCP_Socket) -> net.TCP_Socket {
 	return clientSocket
 }
 
-listen :: proc($GamePackage: typeid, onPackage: proc(payload: GamePackage), socket: net.TCP_Socket) {
-	gamePackage: GamePackage
-
+listenBlocking :: proc(onPackage: proc(header: MessageHeader, payload: string), socket: net.TCP_Socket) {
 	for {
-		status := readPackage(GamePackage, &gamePackage, socket)
-		if status == PackageType.EXIT do break
-		if status == PackageType.ERROR do break
-		if status == PackageType.GAME do onPackage(gamePackage)
+		ok, header, payload := readPackage(socket)
+		if !ok do break
+		onPackage(header, payload)
 	}
 }
 
-say :: proc($GamePackage: typeid, payload: ^GamePackage, socket: net.TCP_Socket) {
+say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: string = "") {
+	header.payloadSize = u32(len(payload))
 	// bytes := transmute([^]u8)&payload;
-	payloadSlice := mem.slice_ptr(payload, 1)
-	bytes := slice.to_bytes(payloadSlice)
-	net.send_tcp(socket, bytes)
-}
+	headerSlice := mem.slice_ptr(header, 1)
+	headerBytes := slice.to_bytes(headerSlice)
+	net.send_tcp(socket, headerBytes)
 
-EXIT_CODE := [8]byte {101, 120, 105, 116, 13, 10, 0, 0}
-
-@(private)
-checkExitCode :: proc(data: []u8) -> bool {
-	if len(data) < 8 do return false
-
-	for b, index in data[:8] do if b != EXIT_CODE[index] do return false
-
-	return true
-}
-
-PackageType :: enum {
-	ERROR, EXIT, NONGAME, GAME
+	if header.payloadSize > 0 {
+		net.send_tcp(socket, transmute([]u8)payload)
+	}
 }
 
 @(private)
-readPackage :: proc($GamePackage: typeid, buffer: ^GamePackage, socket: net.TCP_Socket) -> PackageType {
-	packageSize :: size_of(GamePackage)
-	bufferSize :: max(packageSize, len(EXIT_CODE))
-	payloadBuffer: [bufferSize]byte
+readPackage :: proc(socket: net.TCP_Socket) -> (bool, MessageHeader, string) {
+	header : MessageHeader
+	headerSlice := mem.slice_ptr(&header, 1)
+	headerBuffer := slice.to_bytes(headerSlice)
 
-	length, err := net.recv_tcp(socket, payloadBuffer[:])
-	if err != nil {
-		fmt.println("error while recieving data %s", err)
-		return PackageType.ERROR
+	_, e := net.recv_tcp(socket, headerBuffer[:])
+	if e != nil {
+		fmt.printfln("error while reading socket (header): %s", e)
+		return false, header, ""
 	}
 
-	payload := payloadBuffer[:length]
-	if checkExitCode(payload[:]) {
-		fmt.println("connection ended")
-		return PackageType.EXIT
-	}
-	if length != packageSize {
-		fmt.println("package is netiher exit code nor game package")
-		return PackageType.NONGAME
+	if header.payloadSize == 0 do return true, header, ""
+
+	payloadBuffer := make([]u8, header.payloadSize)
+	defer delete(payloadBuffer)
+
+	_, e2 := net.recv_tcp(socket, payloadBuffer[:])
+	if e2 != nil {
+		fmt.printfln("error while reading socket (payload): %s", e2)
+		return false, header, ""
 	}
 
-	gamePackage := cast(^GamePackage)&payloadBuffer
-
-	buffer^ = gamePackage^
-	return PackageType.GAME
+	payload, e3 := strings.clone_from_bytes(payloadBuffer)
+	if e3 != nil {
+		fmt.printfln("failed to convert bytes to string: %s", e3)
+		return false, header, ""
+	}
+	return true, header, payload
 }

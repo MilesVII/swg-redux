@@ -5,6 +5,7 @@ import "core:net"
 import "core:thread"
 import "core:sync"
 
+import "hex"
 import "networking"
 import "core:encoding/uuid"
 
@@ -65,20 +66,20 @@ startThread :: proc(userIndex: int) {
 
 @(private)
 clientWorker :: proc(t: ^thread.Thread) {
-	onPackage :: proc(data: GamePackage) {
-		fmt.printfln("player %s said %s", data.me, data.message)
-		switch data.message {
+	onPackage :: proc(header: networking.MessageHeader, payload: string) {
+		fmt.printfln("player %s said %s", header.me, header.message)
+		if header.payloadSize > 0 do fmt.printfln("payload: %s", payload)
+		switch header.message {
 			case .JOIN:
-				onJoin(data.me)
-			case .UPDATE_GRID:
-			case .UPDATE_UNIT:
+				onJoin(header.me)
+			case .UPDATE:
 			case .SUBMIT:
 		}
 	}
 
 	player, ok := session.players[t.user_index].?
 	assert(ok, "client socket not registered")
-	networking.listen(GamePackage, onPackage, player.socket)
+	networking.listenBlocking(onPackage, player.socket)
 
 	sync.wait_group_done(&wg)
 }
@@ -106,11 +107,11 @@ onJoin :: proc(player: uuid.Identifier) -> bool {
 	player0, player0Connected := session.players[0].?
 	if player0Connected && player0.id == nil {
 		player0.id = player
-		gridPayload := GamePackage {
-			message = Message.UPDATE_GRID,
-			grid = session.game.grid
+		header := networking.MessageHeader {
+			message = .UPDATE,
 		}
-		networking.say(GamePackage, &gridPayload, player0.socket)
+		gridJSON := hex.gridToJSON(session.game.grid)
+		networking.say(player0.socket, &header, gridJSON)
 		return true
 	}
 
