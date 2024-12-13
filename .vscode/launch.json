@@ -5,7 +5,7 @@
 			"type": "cppvsdbg",
 			"request": "launch",
 			"preLaunchTask": "Build",
-			"name": "Debug",
+			"name": "Client",
 			"program": "${workspaceFolder}/build/debug.exe",
 			"args": [],
 			"cwd": "${workspaceFolder}"
@@ -14,9 +14,18 @@
 			"type": "cppvsdbg",
 			"request": "launch",
 			"preLaunchTask": "Build",
-			"name": "Debug as Server",
+			"name": "Server",
 			"program": "${workspaceFolder}/build/debug.exe",
 			"args": ["server"],
+			"cwd": "${workspaceFolder}"
+		},
+		{
+			"type": "cppvsdbg",
+			"request": "launch",
+			"preLaunchTask": "Build",
+			"name": "Debug",
+			"program": "${workspaceFolder}/build/debug.exe",
+			"args": ["debug"],
 			"cwd": "${workspaceFolder}"
 		}
 	]

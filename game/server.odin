@@ -9,9 +9,12 @@ import "hex"
 import "networking"
 import "core:encoding/uuid"
 
+@(private="file")
 socket : net.TCP_Socket
+@(private="file")
 session : Session
-PLAYER_COUNT :: 2
+@(private="file")
+wg : sync.Wait_Group
 
 Message :: enum { JOIN, UPDATE_GRID, UPDATE_UNIT, SUBMIT }
 GamePackage :: struct {
@@ -32,13 +35,6 @@ Session :: struct {
 	game: GameState
 }
 
-wg : sync.Wait_Group
-
-// GameState :: struct {
-// 	visible units
-// 	visible tiles
-// }
-
 server :: proc() {
 	socket = networking.openServerSocket()
 
@@ -49,11 +45,10 @@ server :: proc() {
 	session.game = createGame()
 	
 	waitForClients()
-	// startThread(0)
 	sync.wait_group_wait(&wg)
 }
 
-@(private)
+@(private="file")
 waitForClients :: proc() {
 	connections : [dynamic] net.TCP_Socket
 
@@ -66,7 +61,7 @@ waitForClients :: proc() {
 	}
 }
 
-@(private)
+@(private="file")
 startThread :: proc(socket: ^net.TCP_Socket, userIndex: int) {
 	t := thread.create(clientWorker)
 	if t != nil {
@@ -77,15 +72,14 @@ startThread :: proc(socket: ^net.TCP_Socket, userIndex: int) {
 	}
 }
 
-@(private)
+@(private="file")
 clientWorker :: proc(t: ^thread.Thread) {
 	onPackage :: proc(socket: net.TCP_Socket, header: networking.MessageHeader, payload: string) {
 		fmt.printfln("player %s said %s", header.me, header.message)
 		if header.payloadSize > 0 do fmt.printfln("payload: %s", payload)
 		switch header.message {
 			case .JOIN:
-				// session.connections[playerSocket]
-				onJoin(header.me, socket)
+				if onJoin(header.me, socket) do startGameIfFull()
 			case .UPDATE:
 			case .SUBMIT:
 		}
@@ -101,17 +95,7 @@ clientWorker :: proc(t: ^thread.Thread) {
 	sync.wait_group_done(&wg)
 }
 
-sendGameGrid :: proc(socket: net.TCP_Socket) {
-	header := networking.MessageHeader {
-		message = .UPDATE,
-	}
-	gridJSON := hex.gridToJSON(session.game.grid)
-	networking.say(socket, &header, gridJSON)
-}
-
-// checkPlayers
-
-@(private)
+@(private="file")
 onJoin :: proc(player: uuid.Identifier, socket: net.TCP_Socket) -> bool {
 	freeSlot := -1
 	for &p, index in session.players {
@@ -142,4 +126,22 @@ onJoin :: proc(player: uuid.Identifier, socket: net.TCP_Socket) -> bool {
 
 	sendGameGrid(socket)
 	return true
+}
+
+@(private="file")
+startGameIfFull :: proc() {
+	for player in session.players do if !player.online do return
+
+	for player in session.players {
+
+	}
+}
+
+@(private="file")
+sendGameGrid :: proc(socket: net.TCP_Socket) {
+	header := networking.MessageHeader {
+		message = .UPDATE,
+	}
+	gridJSON := hex.gridToJSON(session.game.grid)
+	networking.say(socket, &header, gridJSON)
 }
