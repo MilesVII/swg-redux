@@ -120,7 +120,7 @@ connect :: proc() -> uuid.Identifier {
 @(private)
 startListening :: proc() {
 	listener :: proc(t: ^thread.Thread) {
-		onPackage :: proc(header: networking.MessageHeader, payload: string) {
+		onPackage :: proc(_: net.TCP_Socket, header: networking.MessageHeader, payload: string) {
 			fmt.printfln("server said %s: %s bytes", header.message, len(payload))
 			switch header.message {
 				case .JOIN:

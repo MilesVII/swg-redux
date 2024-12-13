@@ -11,6 +11,7 @@ import "core:encoding/uuid"
 
 socket : net.TCP_Socket
 session : Session
+PLAYER_COUNT :: 2
 
 Message :: enum { JOIN, UPDATE_GRID, UPDATE_UNIT, SUBMIT }
 GamePackage :: struct {
@@ -21,13 +22,13 @@ GamePackage :: struct {
 
 Player :: struct {
 	id: Maybe(uuid.Identifier),
+	online: bool,
 	socket: net.TCP_Socket
 }
 
 Session :: struct {
-	started: bool,
 	activePlayerIx: int,
-	players: [2]Maybe(Player),
+	players: [PLAYER_COUNT]Player,
 	game: GameState
 }
 
@@ -42,88 +43,103 @@ server :: proc() {
 	socket = networking.openServerSocket()
 
 	session = Session {
-		started = false,
-		activePlayerIx = -1,
-		players = { nil, nil }
+		activePlayerIx = 0,
 	}
+	for &player in session.players do player.online = false
 	session.game = createGame()
 	
-	sync.wait_group_add(&wg, 2)
 	waitForClients()
 	// startThread(0)
 	sync.wait_group_wait(&wg)
 }
 
 @(private)
-startThread :: proc(userIndex: int) {
+waitForClients :: proc() {
+	connections : [dynamic] net.TCP_Socket
+
+	for counter := 0; ; counter += 1 {
+		clientSocket := networking.waitForClient(socket)
+		append(&connections, clientSocket)
+		fmt.printfln("new client, waiting for JOIN")
+		sync.wait_group_add(&wg, 1)
+		startThread(&connections[len(connections) - 1], counter)
+	}
+}
+
+@(private)
+startThread :: proc(socket: ^net.TCP_Socket, userIndex: int) {
 	t := thread.create(clientWorker)
 	if t != nil {
 		t.init_context = context
 		t.user_index = userIndex
+		t.data = socket
 		thread.start(t)
 	}
 }
 
 @(private)
 clientWorker :: proc(t: ^thread.Thread) {
-	onPackage :: proc(header: networking.MessageHeader, payload: string) {
+	onPackage :: proc(socket: net.TCP_Socket, header: networking.MessageHeader, payload: string) {
 		fmt.printfln("player %s said %s", header.me, header.message)
 		if header.payloadSize > 0 do fmt.printfln("payload: %s", payload)
 		switch header.message {
 			case .JOIN:
-				onJoin(header.me)
+				// session.connections[playerSocket]
+				onJoin(header.me, socket)
 			case .UPDATE:
 			case .SUBMIT:
 		}
 	}
 
-	player, ok := session.players[t.user_index].?
-	assert(ok, "client socket not registered")
-	networking.listenBlocking(onPackage, player.socket)
+	playerSocket := (transmute(^net.TCP_Socket)t.data)^
+	networking.listenBlocking(onPackage, playerSocket)
+	// listenBlocking terminates if there's a socket error
+	for &player in session.players {
+		if player.socket == playerSocket do player.online = false
+	}
 
 	sync.wait_group_done(&wg)
 }
 
-@(private)
-waitForClients :: proc() {
-	client0 := networking.waitForClient(socket)
-	fmt.println("player0 connected")
-	session.players[0] = Player { nil, client0 }
-	startThread(0)
-
-	client1 := networking.waitForClient(socket)
-	fmt.println("player1 connected")
-	session.players[1] = Player { nil, client1 }
-	startThread(1)
+sendGameGrid :: proc(socket: net.TCP_Socket) {
+	header := networking.MessageHeader {
+		message = .UPDATE,
+	}
+	gridJSON := hex.gridToJSON(session.game.grid)
+	networking.say(socket, &header, gridJSON)
 }
 
+// checkPlayers
+
 @(private)
-onJoin :: proc(player: uuid.Identifier) -> bool {
-	if session.started {
-		fmt.printfln("player %s tried to join active game session", player)
+onJoin :: proc(player: uuid.Identifier, socket: net.TCP_Socket) -> bool {
+	freeSlot := -1
+	for &p, index in session.players {
+		id, exists := p.id.?
+		if exists && id == player {
+			// TODO
+			// welcome back
+			p.socket = socket
+			p.online = true
+			freeSlot = index
+			break
+		}
+	}
+	if freeSlot == -1 do for &p, index in session.players {
+		id, exists := p.id.?
+		if !exists {
+			p.id = player
+			p.socket = socket
+			p.online = true
+			freeSlot = index
+		}
+	}
+
+	if freeSlot == -1 {
+		fmt.println("no slots available for player ", player)
 		return false
 	}
 
-	player0, player0Connected := session.players[0].?
-	if player0Connected && player0.id == nil {
-		player0.id = player
-		header := networking.MessageHeader {
-			message = .UPDATE,
-		}
-		gridJSON := hex.gridToJSON(session.game.grid)
-		networking.say(player0.socket, &header, gridJSON)
-		return true
-	}
-
-	
-	player1, player1Connected := session.players[0].?
-	if player1Connected && player1.id == nil {
-		player1.id = player
-		session.started = true
-		// notify both players and start the game
-		return true
-	}
-
-	assert(false, "session not marked as started but player slots are full")
-	return false
+	sendGameGrid(socket)
+	return true
 }

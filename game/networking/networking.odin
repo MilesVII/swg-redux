@@ -48,11 +48,11 @@ waitForClient :: proc(socket: net.TCP_Socket) -> net.TCP_Socket {
 	return clientSocket
 }
 
-listenBlocking :: proc(onPackage: proc(header: MessageHeader, payload: string), socket: net.TCP_Socket) {
+listenBlocking :: proc(onPackage: proc(socket: net.TCP_Socket, header: MessageHeader, payload: string), socket: net.TCP_Socket) {
 	for {
 		ok, header, payload := readPackage(socket)
 		if !ok do break
-		onPackage(header, payload)
+		onPackage(socket, header, payload)
 	}
 }
 
