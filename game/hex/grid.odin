@@ -45,10 +45,14 @@ Grid :: struct($Value: typeid) {
 	cells: []Cell(Value),
 }
 
+Fog :: enum { OBSERVED, TERRAIN, FOG }
+
 GridCell :: struct {
 	color: rl.Color,
 	walkable: bool,
-	mainArea: bool
+	seethrough: bool,
+	mainArea: bool,
+	fog: Fog
 }
 
 grid :: proc(radius: int, $Value: typeid) -> Grid(Value) {
