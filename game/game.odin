@@ -1,8 +1,9 @@
 package game
 
 import rl "vendor:raylib"
-import "hex"
 import "core:slice"
+import "core:fmt"
+import "hex"
 import "utils"
 
 MAP_RADIUS :: 16
@@ -83,9 +84,11 @@ createGame :: proc() -> GameState {
 	return state
 }
 
-getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
+getStateForPlayer :: proc(state: GameState, playerIndex: int) -> GameState {
 	player := state.players[playerIndex]
-	reducedState := state^
+	// prevents memory corruption after passing to function for some reason
+	fmt.println(state.players[0].units[0].type)
+	reducedState := state
 	reducedState.grid.cells = slice.clone(state.grid.cells)
 	for &cell, cellIndex in reducedState.grid.cells {
 		if !cell.visible do continue
@@ -96,7 +99,7 @@ getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 		for &unit in player.units {
 			if
 				hex.distance(unit.position, cell.position.axial) <= VISION[unit.type] &&
-				hex.isVisible(state.grid, unit.position, cell.position.axial) 
+				hex.isVisible(state.grid, unit.position, cell.position.axial)
 			{
 				observedByUint = true
 				break

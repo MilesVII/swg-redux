@@ -118,7 +118,7 @@ vertesex :: proc(position: Axial, scale : f32 = 1) -> [6]rl.Vector2 {
 
 distance :: proc(a: Axial, b: Axial) -> int {
 	v := a - b
-	return (abs(a.x) + abs(a.x + a.y) + abs(a.y)) / 2
+	return (abs(v.x) + abs(v.x + v.y) + abs(v.y)) / 2
 }
 
 axialToWorld :: proc (v: Axial) -> rl.Vector2 {

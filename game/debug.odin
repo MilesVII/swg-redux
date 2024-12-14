@@ -19,11 +19,11 @@ debug :: proc() {
 	rl.SetTargetFPS(240)
 
 	state := createGame()
-	// debugGrid = state.grid
-	reducedState := getStateForPlayer(&state, 0)
+	reducedState := getStateForPlayer(state, 0)
 	debugGrid = reducedState.grid
 
 	for cell in debugGrid.cells {
+		if !cell.visible do continue
 		if cell.value.fog == .OBSERVED do append(&vision, cell.position.axial)
 	}
 
@@ -43,7 +43,6 @@ debugDrawWorld :: proc() {
 	walkables, ok := hex.findPath(debugGrid, {0, 0}, ui.pointedCell)
 	if ok {
 		outline := hex.outline(walkables, .5)
-		// ui.drawOutline(outline)
 		ui.drawPath(walkables, .3)
 	}
 }
