@@ -47,6 +47,42 @@ GameState :: struct {
 	grid: GameGrid
 }
 
+findSpawnPoints :: proc(grid: GameGrid) -> []hex.Axial {
+	radius := grid.radius
+	startingPoint := [6]hex.Axial {
+		{ radius, 0 },
+		{ -radius, 0 },
+		{ 0, radius },
+		{ 0, -radius },
+		{ -radius, radius },
+		{ radius, -radius }
+	}
+	steps := [6]hex.Axial {
+		{ -1, 0 },
+		{ 1, 0 },
+		{ 0, -1 },
+		{ 0, 1 },
+		{ 1, -1 },
+		{ -1, 1 }
+	}
+
+	spawns: [dynamic]hex.Axial
+
+	outer: for i in 0..<6 {
+		for startingPoint[i] != {0, 0} {
+			cellIx := hex.axialToIndex(startingPoint[i], grid.radius)
+			if grid.cells[cellIx].value.mainArea {
+				append(&spawns, startingPoint[i])
+				continue outer
+			} else {
+				startingPoint[i] += steps[i]
+			}
+		}
+	}
+
+	return spawns[:]
+}
+
 createGame :: proc() -> GameState {
 	state := GameState {
 		players = make([]PlayerState, PLAYER_COUNT),
@@ -64,30 +100,35 @@ createGame :: proc() -> GameState {
 	}
 	hex.markWalkableAreas(state.grid)
 
+	assert(PLAYER_COUNT <= 6, "can't find more than six spawn points")
+	spawnPoints := findSpawnPoints(state.grid)
+	assert(len(spawnPoints) >= PLAYER_COUNT, "can't find enough spawn points for this seed, please restart")
+
 	// INIT PLAYERS TOO
-	for &player in state.players {
+	for &player, i in state.players {
 		player = PlayerState {
 			color = rl.RED,
-			units = []GameUnit {},
+			units = []GameUnit {
+				GameUnit {
+					position = spawnPoints[i],
+					type = .MCV,
+					gold = 2,
+					hidden = false
+				}
+			},
 			knownTerrain = make(map[hex.Axial]bool)
 		}
 	}
-
-	state.players[0].units = []GameUnit {
-		GameUnit {
-			position = {0, 0},
-			type = .MCV,
-			gold = 0
-		}
-	}
+	// fmt.println(state.players[0].units)
 
 	return state
 }
 
 getStateForPlayer :: proc(state: GameState, playerIndex: int) -> GameState {
-	player := state.players[playerIndex]
 	// prevents memory corruption after passing to function for some reason
-	fmt.println(state.players[0].units[0].type)
+	fmt.println(state.players[0].units)
+	player := state.players[playerIndex]
+	fmt.println(state.players[0].units)
 	reducedState := state
 	reducedState.grid.cells = slice.clone(state.grid.cells)
 	for &cell, cellIndex in reducedState.grid.cells {
@@ -130,4 +171,8 @@ getStateForPlayer :: proc(state: GameState, playerIndex: int) -> GameState {
 	}
 
 	return reducedState
+}
+
+deleteState :: proc(state: GameState) {
+	delete(state.grid.cells)
 }
