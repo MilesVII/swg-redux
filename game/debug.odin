@@ -27,6 +27,8 @@ debug :: proc() {
 		if cell.value.fog == .OBSERVED do append(&vision, cell.position.axial)
 	}
 
+	deleteState(reducedState)
+
 	for !rl.WindowShouldClose() {
 		ui.updateIO()
 		ui.draw(debugDrawWorld, debugDrawHUD)

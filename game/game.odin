@@ -38,16 +38,16 @@ GameUnit :: struct {
 
 PlayerState :: struct {
 	color: rl.Color,
-	units: []GameUnit,
+	units: [dynamic]GameUnit,
 	knownTerrain: map[hex.Axial]bool
 }
 
 GameState :: struct {
-	players: []PlayerState,
+	players: [PLAYER_COUNT]PlayerState,
 	grid: GameGrid
 }
 
-findSpawnPoints :: proc(grid: GameGrid) -> []hex.Axial {
+findSpawnPoints :: proc(grid: GameGrid) -> [dynamic]hex.Axial {
 	radius := grid.radius
 	startingPoint := [6]hex.Axial {
 		{ radius, 0 },
@@ -80,12 +80,11 @@ findSpawnPoints :: proc(grid: GameGrid) -> []hex.Axial {
 		}
 	}
 
-	return spawns[:]
+	return spawns
 }
 
 createGame :: proc() -> GameState {
 	state := GameState {
-		players = make([]PlayerState, PLAYER_COUNT),
 		grid = hex.grid(MAP_RADIUS, hex.GridCell)
 	}
 
@@ -103,33 +102,31 @@ createGame :: proc() -> GameState {
 	assert(PLAYER_COUNT <= 6, "can't find more than six spawn points")
 	spawnPoints := findSpawnPoints(state.grid)
 	assert(len(spawnPoints) >= PLAYER_COUNT, "can't find enough spawn points for this seed, please restart")
+	fmt.println(spawnPoints)
 
-	// INIT PLAYERS TOO
 	for &player, i in state.players {
+		units := []GameUnit {
+			GameUnit {
+				position = spawnPoints[i],
+				type = .MCV,
+				gold = 2,
+				hidden = false
+			}
+		}
 		player = PlayerState {
 			color = rl.RED,
-			units = []GameUnit {
-				GameUnit {
-					position = spawnPoints[i],
-					type = .MCV,
-					gold = 2,
-					hidden = false
-				}
-			},
+			units = slice.clone_to_dynamic(units),
 			knownTerrain = make(map[hex.Axial]bool)
 		}
 	}
-	// fmt.println(state.players[0].units)
 
 	return state
 }
 
 getStateForPlayer :: proc(state: GameState, playerIndex: int) -> GameState {
 	// prevents memory corruption after passing to function for some reason
-	fmt.println(state.players[0].units)
 	player := state.players[playerIndex]
-	fmt.println(state.players[0].units)
-	reducedState := state
+	reducedState := cloneState(state)
 	reducedState.grid.cells = slice.clone(state.grid.cells)
 	for &cell, cellIndex in reducedState.grid.cells {
 		if !cell.visible do continue
@@ -151,7 +148,15 @@ getStateForPlayer :: proc(state: GameState, playerIndex: int) -> GameState {
 			cell.value.fog = .OBSERVED
 			player.knownTerrain[cell.position.axial] = true
 		} else {
-			cell.value.fog = fallbackFogValue
+			if fallbackFogValue == .FOG {
+				cell.value = {
+					color = rl.BLANK,
+					walkable = false,
+					seethrough = false,
+					mainArea = false,
+					fog = .FOG
+				}
+			} else do cell.value.fog = fallbackFogValue
 		}
 	}
 
@@ -163,16 +168,26 @@ getStateForPlayer :: proc(state: GameState, playerIndex: int) -> GameState {
 			unit.hidden = reducedState.grid.cells[cellIndex].value.fog == hex.Fog.OBSERVED
 		}
 
-
-		p.units = slice.filter(
-			player.units,
-			proc (unit: GameUnit) -> bool {return !unit.hidden}
-		)
+		unitLen := len(p.units)
+		for unitIndex := unitLen - 1; unitIndex >= 0; unitIndex -= 1 {
+			if p.units[unitIndex].hidden do unordered_remove(&p.units, unitIndex)
+		}
 	}
 
 	return reducedState
 }
 
 deleteState :: proc(state: GameState) {
+	for p in state.players do delete(p.units)
 	delete(state.grid.cells)
+}
+
+cloneState :: proc(state: GameState) -> GameState {
+	newState := state
+	for &p, i in newState.players {
+		p.units = slice.clone_to_dynamic(p.units[:])
+	}
+	newState.grid.cells = slice.clone(state.grid.cells)
+
+	return newState
 }
