@@ -48,22 +48,22 @@ GameState :: struct {
 }
 
 findSpawnPoints :: proc(grid: GameGrid) -> [dynamic]hex.Axial {
-	radius := grid.radius
+	radius := grid.radius - 1
 	startingPoint := [6]hex.Axial {
-		{ radius, 0 },
 		{ -radius, 0 },
-		{ 0, radius },
+		{ radius, 0 },
 		{ 0, -radius },
-		{ -radius, radius },
-		{ radius, -radius }
+		{ 0, radius },
+		{ radius, -radius },
+		{ -radius, radius }
 	}
 	steps := [6]hex.Axial {
-		{ -1, 0 },
 		{ 1, 0 },
-		{ 0, -1 },
+		{ -1, 0 },
 		{ 0, 1 },
-		{ 1, -1 },
-		{ -1, 1 }
+		{ 0, -1 },
+		{ -1, 1 },
+		{ 1, -1 }
 	}
 
 	spawns: [dynamic]hex.Axial
