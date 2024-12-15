@@ -2,7 +2,7 @@ package game
 
 import rl "vendor:raylib"
 import "core:slice"
-import "core:fmt"
+// import "core:fmt"
 import "hex"
 import "utils"
 
@@ -39,7 +39,7 @@ GameUnit :: struct {
 PlayerState :: struct {
 	color: rl.Color,
 	units: [dynamic]GameUnit,
-	knownTerrain: map[hex.Axial]bool
+	knownTerrain: [dynamic]hex.Axial
 }
 
 GameState :: struct {
@@ -94,7 +94,8 @@ createGame :: proc() -> GameState {
 		cell.value = {
 			color = colors[hi],
 			walkable = hi < 8 && hi > 2,
-			seethrough = hi < 8
+			seethrough = hi < 8,
+			fog = .FOG
 		}
 	}
 	hex.markWalkableAreas(state.grid)
@@ -102,7 +103,6 @@ createGame :: proc() -> GameState {
 	assert(PLAYER_COUNT <= 6, "can't find more than six spawn points")
 	spawnPoints := findSpawnPoints(state.grid)
 	assert(len(spawnPoints) >= PLAYER_COUNT, "can't find enough spawn points for this seed, please restart")
-	fmt.println(spawnPoints)
 
 	for &player, i in state.players {
 		units := []GameUnit {
@@ -116,22 +116,22 @@ createGame :: proc() -> GameState {
 		player = PlayerState {
 			color = rl.RED,
 			units = slice.clone_to_dynamic(units),
-			knownTerrain = make(map[hex.Axial]bool)
+			knownTerrain = make([dynamic]hex.Axial)
 		}
 	}
 
 	return state
 }
 
-getStateForPlayer :: proc(state: GameState, playerIndex: int) -> GameState {
-	// prevents memory corruption after passing to function for some reason
-	player := state.players[playerIndex]
-	reducedState := cloneState(state)
+getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
+	player := &state.players[playerIndex]
+	reducedState := cloneState(state^)
 	reducedState.grid.cells = slice.clone(state.grid.cells)
 	for &cell, cellIndex in reducedState.grid.cells {
 		if !cell.visible do continue
 
-		fallbackFogValue := cell.position.axial in player.knownTerrain ? hex.Fog.TERRAIN : hex.Fog.FOG
+		known := utils.includes(&player.knownTerrain, &cell.position.axial)
+		fallbackFogValue := known ? hex.Fog.TERRAIN : hex.Fog.FOG
 
 		observedByUint := false
 		for &unit in player.units {
@@ -146,7 +146,7 @@ getStateForPlayer :: proc(state: GameState, playerIndex: int) -> GameState {
 
 		if observedByUint {
 			cell.value.fog = .OBSERVED
-			player.knownTerrain[cell.position.axial] = true
+			if !known do append(&player.knownTerrain, cell.position.axial)
 		} else {
 			if fallbackFogValue == .FOG {
 				cell.value = {
@@ -178,7 +178,10 @@ getStateForPlayer :: proc(state: GameState, playerIndex: int) -> GameState {
 }
 
 deleteState :: proc(state: GameState) {
-	for p in state.players do delete(p.units)
+	for p in state.players {
+		delete(p.units)
+		delete(p.knownTerrain)
+	}
 	delete(state.grid.cells)
 }
 
@@ -186,6 +189,7 @@ cloneState :: proc(state: GameState) -> GameState {
 	newState := state
 	for &p, i in newState.players {
 		p.units = slice.clone_to_dynamic(p.units[:])
+		p.knownTerrain = slice.clone_to_dynamic(p.knownTerrain[:])
 	}
 	newState.grid.cells = slice.clone(state.grid.cells)
 

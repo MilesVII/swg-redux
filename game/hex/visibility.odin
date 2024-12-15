@@ -8,7 +8,7 @@ isVisible :: proc(grid: Grid(GridCell), from: Axial, to: Axial) -> bool {
 	origin := axialToWorld(from)
 	worldRay := axialToWorld(to) - origin
 	
-	for i in 0..=sampleCount {
+	for i in 0..=(sampleCount - 2) {
 		target := origin + worldRay * (f32(i) / f32(sampleCount))
 		targetCell := worldToAxial(target)
 		if !isWithinGrid(targetCell, grid.radius) do return false
