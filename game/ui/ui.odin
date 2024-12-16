@@ -4,6 +4,8 @@ import rl "vendor:raylib"
 import "../hex"
 import "../utils"
 import "core:fmt"
+import "core:strings"
+import "core:math"
 
 WINDOW :: [2]i32 {640, 480}
 
@@ -16,12 +18,40 @@ camera := rl.Camera2D {
 pointer: rl.Vector2
 pointedCell: hex.Axial
 
+UI_TEXT_MOV: rl.Texture2D
+UI_TEXT_ATK: rl.Texture2D
+UI_TEXT_DIG: rl.Texture2D
+UI_TEXT_BLD: rl.Texture2D
+
+initTextTextures :: proc() {
+	imageMov := rl.ImageText("MOVE", 10, rl.BLACK)
+	imageAtk := rl.ImageText("ATACK", 10, rl.BLACK)
+	imageDig := rl.ImageText("DIG", 10, rl.BLACK)
+	imageBld := rl.ImageText("BUILD", 10, rl.BLACK)
+
+	UI_TEXT_MOV = rl.LoadTextureFromImage(imageMov)
+	UI_TEXT_ATK = rl.LoadTextureFromImage(imageAtk)
+	UI_TEXT_DIG = rl.LoadTextureFromImage(imageDig)
+	UI_TEXT_BLD = rl.LoadTextureFromImage(imageBld)
+
+	rl.UnloadImage(imageMov)
+	rl.UnloadImage(imageAtk)
+	rl.UnloadImage(imageDig)
+	rl.UnloadImage(imageBld)
+}
+
 updateIO :: proc() {
+	dt := rl.GetFrameTime()
 	pointer = rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
 
 	if rl.IsKeyDown(rl.KeyboardKey.RIGHT) do camera.zoom += 0.1
 	else if rl.IsKeyDown(rl.KeyboardKey.LEFT) do camera.zoom -= 0.1
 	if camera.zoom < .1 do camera.zoom = .1
+
+	if rl.IsMouseButtonDown(rl.MouseButton.LEFT) {
+		mouseDelta := rl.GetMouseDelta()
+		camera.offset += mouseDelta
+	}
 	
 	pointedCell = hex.worldToAxial(pointer)
 }
@@ -99,4 +129,32 @@ drawTriangle :: proc(position: hex.Axial, up: bool, color: rl.Color, scale := f3
 	hexVertesex := hex.vertesex(position, scale)
 	vx := up ? swizzle(hexVertesex, 0, 2, 4) : swizzle(hexVertesex, 1, 3, 5)
 	rl.DrawTriangle(vx[0], vx[1], vx[2], color)
+}
+
+button :: proc(position: rl.Vector2, radius: f32, caption: rl.Texture2D, colors: [2]rl.Color, action: proc()) -> bool{
+	vxOuter := hex.vertesexRaw(position, radius)
+	vxInner := hex.vertesexRaw(position, radius * .8)
+	hovered := rl.Vector2Length(rl.GetMousePosition() - position) < radius
+
+	rl.DrawTriangleFan(&vxOuter[0], 6, colors[hovered ? 0 : 1])
+	rl.DrawTriangleFan(&vxInner[0], 6, colors[0])
+	
+	textureSize := [2]f32 {
+		f32(caption.width),
+		f32(caption.height)
+	}
+
+	rl.DrawTextureV(
+		caption,
+		position - textureSize / 2,
+		rl.WHITE
+	)
+
+	if hovered {
+		if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) do action()
+
+		return true
+	}
+
+	return false
 }

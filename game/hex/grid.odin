@@ -91,29 +91,26 @@ getGridSide :: proc(radius: int) -> int {
 	return radius * 2 + 1
 }
 
-vertesex :: proc(position: Axial, scale : f32 = 1) -> [6]rl.Vector2 {
-	ray := rl.Vector2 {0, 1.0 / math.sqrt(f32(3)) } * scale
+vertesexRaw :: proc(position: rl.Vector2, rayLength: f32) -> [6]rl.Vector2 {
+	ray := rl.Vector2 {0, rayLength }
 
 	sixty : f32 = -utils.TAU / 6.0
 	ray = rl.Vector2Rotate(ray, sixty)
 
-	zero := [6]rl.Vector2 {
-		ray,
-		rl.Vector2Rotate(ray, sixty),
-		rl.Vector2Rotate(ray, sixty * 2),
-		rl.Vector2Rotate(ray, sixty * 3),
-		rl.Vector2Rotate(ray, sixty * 4),
-		rl.Vector2Rotate(ray, sixty * 5),
+	return [6]rl.Vector2 {
+		position + ray,
+		position + rl.Vector2Rotate(ray, sixty),
+		position + rl.Vector2Rotate(ray, sixty * 2),
+		position + rl.Vector2Rotate(ray, sixty * 3),
+		position + rl.Vector2Rotate(ray, sixty * 4),
+		position + rl.Vector2Rotate(ray, sixty * 5),
 	}
+}
 
+vertesex :: proc(position: Axial, scale : f32 = 1) -> [6]rl.Vector2 {
 	displacement := BASIS_X * f32(position.x) + BASIS_Y * f32(position.y)
-
-	displaced: [6]rl.Vector2;
-	for vertex, i in zero {
-		displaced[i] = (vertex) + displacement
-	}
-
-	return displaced
+	
+	return vertesexRaw(displacement, 1.0 / math.sqrt(f32(3)) * scale)
 }
 
 distance :: proc(a: Axial, b: Axial) -> int {

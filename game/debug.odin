@@ -15,6 +15,7 @@ debug :: proc() {
 	defer rl.CloseWindow()
 
 	rl.SetTargetFPS(240)
+	ui.initTextTextures()
 
 	state := createGame()
 	reducedState := getStateForPlayer(&state, 0)
@@ -47,5 +48,5 @@ debugDrawWorld :: proc() {
 @(private="file")
 debugDrawHUD :: proc() {
 	rl.DrawText(fmt.ctprint(ui.pointedCell), 0, 0, 8, rl.RED)
-	rl.DrawText(fmt.ctprint(1.0 / rl.GetFrameTime()), 0, 8, 8, rl.RED)
+	rl.DrawText(fmt.ctprint(rl.GetFPS()), 0, 8, 8, rl.RED)
 }

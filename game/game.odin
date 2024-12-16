@@ -206,8 +206,9 @@ cloneState :: proc(state: GameState) -> GameState {
 	return newState
 }
 
-drawUnit :: proc(position: hex.Axial, unit: GameUnitType, color: rl.Color) {
-	vx := hex.vertesex(position, .8)
+drawUnit :: proc(position: hex.Axial, unit: GameUnitType, color: rl.Color) -> bool {
+	hovered := ui.pointedCell == position
+	vx := hex.vertesex(position, hovered ? 1 : .8)
 	rl.DrawTriangleFan(&vx[0], 6, rl.BLACK)
 
 	switch unit {
@@ -219,4 +220,6 @@ drawUnit :: proc(position: hex.Axial, unit: GameUnitType, color: rl.Color) {
 			ui.drawTriangle(position, true, color, .7)
 			ui.drawTriangle(position, false, color, .7)
 	}
+
+	return hovered
 }

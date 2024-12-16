@@ -29,11 +29,15 @@ clientState := ClientState {
 	status = .CONNECTING
 }
 
+@(private="file")
+selectedUnit : ^GameUnit = nil
+
 client :: proc() {
 	rl.InitWindow(ui.WINDOW.x, ui.WINDOW.y, "SWGRedux")
 	defer rl.CloseWindow()
 
 	rl.SetTargetFPS(240)
+	ui.initTextTextures()
 
 	me := connect()
 
@@ -49,11 +53,15 @@ clientDrawWorld :: proc() {
 
 	ui.drawGrid(clientState.game.grid)
 
-	for player in clientState.game.players {
-		for unit in player.units {
-			drawUnit(unit.position, unit.type, player.color)
+	unitHovered := false
+	for &player in clientState.game.players {
+		for &unit in player.units {
+			unitHovered ||= drawUnit(unit.position, unit.type, player.color)
+			if rl.IsMouseButtonDown(rl.MouseButton.LEFT) do selectedUnit = &unit
 		}
 	}
+
+	rl.SetMouseCursor(unitHovered ? rl.MouseCursor.POINTING_HAND : rl.MouseCursor.DEFAULT)
 }
 
 @(private="file")
@@ -68,6 +76,28 @@ clientDrawHUD :: proc() {
 	}
 	framerate := math.round(1.0 / rl.GetFrameTime())
 	rl.DrawText(fmt.ctprint(framerate), 4, 16, 10, rl.RED)
+
+	if clientState.status == .PLAYING {
+		if selectedUnit != nil {
+			buttonSize := f32(32.0)
+			y := f32(ui.WINDOW[1]) - buttonSize * 1.5
+			xStart := buttonSize * 1.5
+			xStep := buttonSize * 2.5
+
+			ui.button(
+				{ xStart, y },
+				f32(buttonSize),
+				ui.UI_TEXT_MOV,
+				{
+					rl.WHITE,
+					rl.BLACK
+				},
+				proc () {
+					fmt.println("Button pressed")
+				}
+			)
+		}
+	} else do selectedUnit = nil
 }
 
 @(private="file")
