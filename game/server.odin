@@ -16,13 +16,6 @@ session : Session
 @(private="file")
 wg : sync.Wait_Group
 
-Message :: enum { JOIN, UPDATE_GRID, UPDATE_UNIT, SUBMIT }
-GamePackage :: struct {
-	message: Message,
-	me: uuid.Identifier,
-	grid: GameGrid
-}
-
 Player :: struct {
 	id: Maybe(uuid.Identifier),
 	online: bool,
@@ -35,11 +28,16 @@ Session :: struct {
 	game: GameState
 }
 
+TurnMessage :: struct {
+	activePlayer: int,
+	activeIsYou: bool
+}
+
 server :: proc() {
 	socket = networking.openServerSocket()
 
 	session = Session {
-		activePlayerIx = 0,
+		activePlayerIx = -1,
 	}
 	for &player in session.players do player.online = false
 	session.game = createGame()
@@ -80,8 +78,9 @@ clientWorker :: proc(t: ^thread.Thread) {
 		switch header.message {
 			case .JOIN:
 				if onJoin(header.me, socket) do startGameIfFull()
-			case .UPDATE:
-			case .SUBMIT:
+			case .UPDATE: //ignored
+			case .TURN: //ignored
+			case .ORDERS:
 		}
 	}
 
@@ -116,6 +115,7 @@ onJoin :: proc(player: uuid.Identifier, socket: net.TCP_Socket) -> bool {
 			p.socket = socket
 			p.online = true
 			freeSlot = index
+			break
 		}
 	}
 
@@ -124,7 +124,7 @@ onJoin :: proc(player: uuid.Identifier, socket: net.TCP_Socket) -> bool {
 		return false
 	}
 
-	sendGameGrid(socket)
+	sendGameState(socket, freeSlot)
 	return true
 }
 
@@ -132,16 +132,29 @@ onJoin :: proc(player: uuid.Identifier, socket: net.TCP_Socket) -> bool {
 startGameIfFull :: proc() {
 	for player in session.players do if !player.online do return
 
-	for player in session.players {
-
+	session.activePlayerIx = 0
+	for player, playerIndex in session.players {
+		sendTurnMessage(player.socket, playerIndex)
 	}
 }
 
 @(private="file")
-sendGameGrid :: proc(socket: net.TCP_Socket) {
+sendGameState :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	header := networking.MessageHeader {
 		message = .UPDATE,
 	}
-	gridJSON := hex.gridToJSON(session.game.grid)
-	networking.say(socket, &header, gridJSON)
+	game := getStateForPlayer(&session.game, playerIndex)
+	// gameJSON := encode(game)
+	networking.say(socket, &header, encode(game))
+}
+
+sendTurnMessage :: proc(socket: net.TCP_Socket, playerIndex: int) {
+	header := networking.MessageHeader {
+		message = .TURN,
+	}
+	turnData := TurnMessage {
+		activePlayer = session.activePlayerIx,
+		activeIsYou = playerIndex == session.activePlayerIx
+	}
+	networking.say(socket, &header, encode(turnData))
 }

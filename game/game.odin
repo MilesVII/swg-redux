@@ -150,7 +150,7 @@ getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 		} else {
 			if fallbackFogValue == .FOG {
 				cell.value = {
-					color = rl.BLANK,
+					color = rl.GRAY,
 					walkable = false,
 					seethrough = false,
 					mainArea = false,

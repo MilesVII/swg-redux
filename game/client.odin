@@ -7,6 +7,7 @@ import "core:net"
 import "core:thread"
 import "core:encoding/uuid"
 import "core:crypto"
+import "core:math"
 
 import "hex"
 import "ui"
@@ -18,7 +19,7 @@ ClientStatus :: enum {
 }
 
 ClientState :: struct {
-	grid: GameGrid,
+	game: GameState,
 	serverSocket: net.TCP_Socket,
 	status: ClientStatus
 }
@@ -44,13 +45,23 @@ client :: proc() {
 
 @(private="file")
 clientDrawWorld :: proc() {
-	// if clientState.status != .CONNECTING do drawGrid()
-	
+	if clientState.status == .CONNECTING do return
+
+	ui.drawGrid(clientState.game.grid)
 }
 
 @(private="file")
 clientDrawHUD :: proc() {
-
+	// fmt.ctprint(ui.pointedCell)
+	switch clientState.status {
+		case .CONNECTING: rl.DrawText("Connecting to server", 4, 4, 10, rl.BLACK)
+		case .LOBBY:      rl.DrawText("Waiting for players to join", 4, 4, 10, rl.BLACK)
+		case .PLAYING:    rl.DrawText("Your turn", 4, 4, 10, rl.RED)
+		case .WAITING:    rl.DrawText("Waiting for other players", 4, 4, 10, rl.BLACK)
+		case .FINISH:     rl.DrawText("Game over", 4, 4, 10, rl.BLACK)
+	}
+	framerate := math.round(1.0 / rl.GetFrameTime())
+	rl.DrawText(fmt.ctprint(framerate), 4, 16, 10, rl.RED)
 }
 
 @(private="file")
@@ -76,11 +87,17 @@ startListening :: proc() {
 		onPackage :: proc(_: net.TCP_Socket, header: networking.MessageHeader, payload: string) {
 			fmt.printfln("server said %s: %s bytes", header.message, len(payload))
 			switch header.message {
-				case .JOIN:
+				case .JOIN: // ignored
 				case .UPDATE:
-					clientState.grid = hex.jsonToGrid(payload)
+					deleteState(clientState.game)
+					clientState.game = createGame()
+					decode(payload, &clientState.game)
 					clientState.status = .LOBBY
-				case .SUBMIT:
+				case .ORDERS: // ignored
+				case .TURN: 
+					turnMessage: TurnMessage
+					decode(payload, &turnMessage)
+					clientState.status = turnMessage.activeIsYou ? .PLAYING : .WAITING
 			}
 		}
 

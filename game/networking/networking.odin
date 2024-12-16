@@ -9,7 +9,7 @@ import "core:strings"
 
 PORT :: 8000
 
-Message :: enum { JOIN, UPDATE, SUBMIT }
+Message :: enum { JOIN, UPDATE, TURN, ORDERS }
 MessageHeader :: struct {
 	message: Message,
 	me: uuid.Identifier,

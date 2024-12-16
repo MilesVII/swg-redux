@@ -1,10 +1,10 @@
-package hex
+package game
 
 import "core:fmt"
 import "core:encoding/json"
 
-gridToJSON :: proc(grid: Grid(GridCell)) -> string {
-	bytes, err := json.marshal(grid, {
+encode :: proc(data: $T) -> string {
+	bytes, err := json.marshal(data, {
 		pretty = true
 	})
 	if err != nil do fmt.panicf("failed to marshal grid with \"%s\"", err)
@@ -12,10 +12,8 @@ gridToJSON :: proc(grid: Grid(GridCell)) -> string {
 	return transmute(string)bytes
 }
 
-jsonToGrid :: proc(gridData: string) -> Grid(GridCell) {
-	grid: Grid(GridCell)
+decode :: proc(data: string, buffer: ^$T) {
 	// fmt.println("unmarshing ", len(gridData), " bytes")
-	err := json.unmarshal(transmute([]byte)gridData, &grid)
+	err := json.unmarshal(transmute([]byte)data, buffer)
 	if err != nil do fmt.panicf("failed to unmarshal grid with \"%s\"", err)
-	return grid
 }

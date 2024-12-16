@@ -44,7 +44,13 @@ draw :: proc(world: proc(), hud: proc()) {
 drawGrid :: proc(grid: hex.Grid(hex.GridCell)) {
 	for cell in grid.cells {
 		if cell.visible {
+
 			color := cell.value.color
+			if cell.value.fog == .TERRAIN {
+				color = color - color / 3
+				color.a = 255
+			}
+
 			if cell.value.fog == .TERRAIN do color.w = 120
 			vertesex := cell.vertesex;
 			rl.DrawTriangleFan(&vertesex[0], 6, color)
