@@ -4,6 +4,7 @@ import rl "vendor:raylib"
 import "core:slice"
 // import "core:fmt"
 import "hex"
+import "ui"
 import "utils"
 
 MAP_RADIUS :: 16
@@ -45,6 +46,15 @@ PlayerState :: struct {
 GameState :: struct {
 	players: [PLAYER_COUNT]PlayerState,
 	grid: GameGrid
+}
+
+PLAYER_COLORS := [?]rl.Color {
+	{218, 64, 0, 255},
+	{0, 218, 138, 255},
+	{167, 218, 0, 255},
+	{0, 200, 218, 255},
+	{200, 0, 200, 255},
+	{20, 0, 220, 255}
 }
 
 findSpawnPoints :: proc(grid: GameGrid) -> [dynamic]hex.Axial {
@@ -114,7 +124,7 @@ createGame :: proc() -> GameState {
 			}
 		}
 		player = PlayerState {
-			color = rl.RED,
+			color = PLAYER_COLORS[i],
 			units = slice.clone_to_dynamic(units),
 			knownTerrain = make([dynamic]hex.Axial)
 		}
@@ -165,7 +175,7 @@ getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 
 		for &unit in p.units {
 			cellIndex := hex.axialToIndex(unit.position, state.grid.radius)
-			unit.hidden = reducedState.grid.cells[cellIndex].value.fog == hex.Fog.OBSERVED
+			unit.hidden = reducedState.grid.cells[cellIndex].value.fog != hex.Fog.OBSERVED
 		}
 
 		unitLen := len(p.units)
@@ -194,4 +204,19 @@ cloneState :: proc(state: GameState) -> GameState {
 	newState.grid.cells = slice.clone(state.grid.cells)
 
 	return newState
+}
+
+drawUnit :: proc(position: hex.Axial, unit: GameUnitType, color: rl.Color) {
+	vx := hex.vertesex(position, .8)
+	rl.DrawTriangleFan(&vx[0], 6, rl.BLACK)
+
+	switch unit {
+		case .GUN:
+			ui.drawTriangle(position, true, color, .7)
+		case .TONK:
+			ui.drawTriangle(position, false, color, .7)
+		case .MCV:
+			ui.drawTriangle(position, true, color, .7)
+			ui.drawTriangle(position, false, color, .7)
+	}
 }

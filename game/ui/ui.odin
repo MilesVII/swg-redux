@@ -65,25 +65,27 @@ drawOutline :: proc(outline: []hex.Line, color: rl.Color = rl.BLACK) {
 	}
 }
 
-drawPath :: proc(path: hex.Path, thickness := f32(.4), color: rl.Color = rl.BLACK) {
-	drawLine :: proc(from: rl.Vector2, to: rl.Vector2, thickness: f32, color: rl.Color = rl.BLACK) {
-		ray := to - from
-		offv := rl.Vector2Normalize(ray) * thickness * .5
-		ninety : f32 = -utils.TAU * .25
+drawLine :: proc(from: rl.Vector2, to: rl.Vector2, thickness: f32, color: rl.Color = rl.BLACK) {
+	ray := to - from
+	offv := rl.Vector2Normalize(ray) * thickness * .5
+	ninety : f32 = -utils.TAU * .25
 
-		vx := [4]rl.Vector2 {
-			from + rl.Vector2Rotate(offv, ninety * 3),
-			from + ray + rl.Vector2Rotate(offv, ninety * 3),
-			from + ray + rl.Vector2Rotate(offv, ninety),
-			from + rl.Vector2Rotate(offv, ninety),
-		}
-		
-		rl.DrawTriangleFan(&vx[0], 4, color)
+	vx := [4]rl.Vector2 {
+		from + rl.Vector2Rotate(offv, ninety * 3),
+		from + ray + rl.Vector2Rotate(offv, ninety * 3),
+		from + ray + rl.Vector2Rotate(offv, ninety),
+		from + rl.Vector2Rotate(offv, ninety),
 	}
+	
+	rl.DrawTriangleFan(&vx[0], 4, color)
+}
+
+drawPath :: proc(path: hex.Path, thickness := f32(.4), color: rl.Color = rl.BLACK) {
 
 	for node, index in path {
-		vx := hex.vertesex(node, thickness)
-		rl.DrawTriangleFan(&vx[0], 6, color)
+		// vx := hex.vertesex(node, thickness)
+		// rl.DrawTriangleFan(&vx[0], 6, color)
+		rl.DrawCircleV(hex.axialToWorld(node), thickness, color)
 
 		if index != len(path) - 1 {
 			f := hex.axialToWorld(node)
@@ -91,4 +93,10 @@ drawPath :: proc(path: hex.Path, thickness := f32(.4), color: rl.Color = rl.BLAC
 			drawLine(f, t, thickness, color)
 		}
 	}
+}
+
+drawTriangle :: proc(position: hex.Axial, up: bool, color: rl.Color, scale := f32(.7)) {
+	hexVertesex := hex.vertesex(position, scale)
+	vx := up ? swizzle(hexVertesex, 0, 2, 4) : swizzle(hexVertesex, 1, 3, 5)
+	rl.DrawTriangle(vx[0], vx[1], vx[2], color)
 }

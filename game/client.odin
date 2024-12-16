@@ -48,6 +48,12 @@ clientDrawWorld :: proc() {
 	if clientState.status == .CONNECTING do return
 
 	ui.drawGrid(clientState.game.grid)
+
+	for player in clientState.game.players {
+		for unit in player.units {
+			drawUnit(unit.position, unit.type, player.color)
+		}
+	}
 }
 
 @(private="file")
