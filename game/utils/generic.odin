@@ -10,3 +10,18 @@ includes :: proc(array: ^[dynamic]$T, value: ^T) -> bool {
 	}
 	return false
 }
+
+@(private)
+cursorHover := false
+
+cursorHoverBegin :: proc() {
+	cursorHover = false
+}
+
+setCursorHover :: proc(hover: bool) {
+	if hover do cursorHover = true
+}
+
+cursorHoverEnd :: proc() {
+	rl.SetMouseCursor(cursorHover ? rl.MouseCursor.POINTING_HAND : rl.MouseCursor.DEFAULT)
+}

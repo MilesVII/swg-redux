@@ -24,6 +24,10 @@ ClientState :: struct {
 	status: ClientStatus
 }
 
+UIState :: enum {
+	DISABLED, FREE, ORDER_MOV, ORDER_BLD, ORDER_ATK, ORDER_DIG
+}
+
 @(private="file")
 clientState := ClientState {
 	status = .CONNECTING
@@ -31,6 +35,42 @@ clientState := ClientState {
 
 @(private="file")
 selectedUnit : ^GameUnit = nil
+
+BUTTON_ATK := ui.Button {
+	action = placeholder,
+	caption = &ui.UI_TEXT_ATK
+}
+BUTTON_DIG := ui.Button {
+	action = placeholder,
+	caption = &ui.UI_TEXT_DIG
+}
+BUTTON_MOV := ui.Button {
+	action = placeholder,
+	caption = &ui.UI_TEXT_MOV
+}
+BUTTON_BLD := ui.Button {
+	action = placeholder,
+	caption = &ui.UI_TEXT_BLD
+}
+
+BUTTON_ROWS := [GameUnitType][]ui.Button {
+	.TONK = {
+		BUTTON_ATK,
+		BUTTON_MOV
+	},
+	.GUN = {
+		BUTTON_ATK
+	},
+	.MCV = {
+		BUTTON_DIG,
+		BUTTON_MOV,
+		BUTTON_BLD
+	}
+}
+
+placeholder :: proc() {
+
+}
 
 client :: proc() {
 	rl.InitWindow(ui.WINDOW.x, ui.WINDOW.y, "SWGRedux")
@@ -53,15 +93,13 @@ clientDrawWorld :: proc() {
 
 	ui.drawGrid(clientState.game.grid)
 
-	unitHovered := false
 	for &player in clientState.game.players {
 		for &unit in player.units {
-			unitHovered ||= drawUnit(unit.position, unit.type, player.color)
+			unitHovered := drawUnit(unit.position, unit.type, player.color)
+			utils.setCursorHover(unitHovered)
 			if rl.IsMouseButtonDown(rl.MouseButton.LEFT) do selectedUnit = &unit
 		}
 	}
-
-	rl.SetMouseCursor(unitHovered ? rl.MouseCursor.POINTING_HAND : rl.MouseCursor.DEFAULT)
 }
 
 @(private="file")
@@ -80,21 +118,19 @@ clientDrawHUD :: proc() {
 	if clientState.status == .PLAYING {
 		if selectedUnit != nil {
 			buttonSize := f32(32.0)
-			y := f32(ui.WINDOW[1]) - buttonSize * 1.5
-			xStart := buttonSize * 1.5
-			xStep := buttonSize * 2.5
+			origin := rl.Vector2 {
+				f32(ui.WINDOW[0]) * .5,
+				f32(ui.WINDOW[1]) - buttonSize * 1.5
+			}
 
-			ui.button(
-				{ xStart, y },
-				f32(buttonSize),
-				ui.UI_TEXT_MOV,
+			ui.buttonRow(
+				origin,
+				buttonSize,
 				{
 					rl.WHITE,
 					rl.BLACK
 				},
-				proc () {
-					fmt.println("Button pressed")
-				}
+				BUTTON_ROWS[selectedUnit.type]
 			)
 		}
 	} else do selectedUnit = nil

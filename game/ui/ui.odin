@@ -57,6 +57,8 @@ updateIO :: proc() {
 }
 
 draw :: proc(world: proc(), hud: proc()) {
+	utils.cursorHoverBegin()
+	defer utils.cursorHoverEnd()
 	rl.BeginDrawing()
 	defer rl.EndDrawing()
 
@@ -157,4 +159,30 @@ button :: proc(position: rl.Vector2, radius: f32, caption: rl.Texture2D, colors:
 	}
 
 	return false
+}
+
+Button :: struct {
+	caption: ^rl.Texture2D,
+	action: proc()
+}
+
+buttonRow :: proc(origin: rl.Vector2, radius: f32, colors: [2]rl.Color, buttons: []Button) {
+	buttonCount := len(buttons)
+
+	xStep := radius * 2.5
+	width := xStep * f32(buttonCount - 1)
+	xStart := origin.x - width * .5
+
+	y := f32(WINDOW[1]) - radius * 1.5
+
+	for butt, i in buttons {
+		hovered := button(
+			{ xStart + xStep * f32(i), y },
+			radius,
+			butt.caption^,
+			colors,
+			butt.action
+		)
+		utils.setCursorHover(hovered)
+	}
 }
