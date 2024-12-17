@@ -13,7 +13,7 @@ camera := rl.Camera2D {
 	offset = rl.Vector2 {f32(WINDOW.x) / 2, f32(WINDOW.y) / 2},
 	target = rl.Vector2 {0, 0},
 	rotation = 0.0,
-	zoom = 20.0,
+	zoom = 30.0,
 }
 pointer: rl.Vector2
 pointedCell: hex.Axial
@@ -22,22 +22,26 @@ UI_TEXT_MOV: rl.Texture2D
 UI_TEXT_ATK: rl.Texture2D
 UI_TEXT_DIG: rl.Texture2D
 UI_TEXT_BLD: rl.Texture2D
+UI_TEXT_CLR: rl.Texture2D
 
 initTextTextures :: proc() {
 	imageMov := rl.ImageText("MOVE", 10, rl.BLACK)
 	imageAtk := rl.ImageText("ATACK", 10, rl.BLACK)
 	imageDig := rl.ImageText("DIG", 10, rl.BLACK)
 	imageBld := rl.ImageText("BUILD", 10, rl.BLACK)
+	imageClr := rl.ImageText("CLEAR", 10, rl.BLACK)
 
 	UI_TEXT_MOV = rl.LoadTextureFromImage(imageMov)
 	UI_TEXT_ATK = rl.LoadTextureFromImage(imageAtk)
 	UI_TEXT_DIG = rl.LoadTextureFromImage(imageDig)
 	UI_TEXT_BLD = rl.LoadTextureFromImage(imageBld)
+	UI_TEXT_CLR = rl.LoadTextureFromImage(imageClr)
 
 	rl.UnloadImage(imageMov)
 	rl.UnloadImage(imageAtk)
 	rl.UnloadImage(imageDig)
 	rl.UnloadImage(imageBld)
+	rl.UnloadImage(imageClr)
 }
 
 updateIO :: proc() {
@@ -97,6 +101,15 @@ drawOutline :: proc(outline: []hex.Line, color: rl.Color = rl.BLACK) {
 	}
 }
 
+drawHexLine :: proc(from: hex.Axial, to: hex.Axial, thickness: f32, color: rl.Color = rl.BLACK) {
+	f := hex.axialToWorld(from)
+	t := hex.axialToWorld(to)
+	// ray := rl.Vector2Normalize(t - f)
+	// f += ray
+	// t += ray * -1
+	drawLine(f, t, thickness, color)
+}
+
 drawLine :: proc(from: rl.Vector2, to: rl.Vector2, thickness: f32, color: rl.Color = rl.BLACK) {
 	ray := to - from
 	offv := rl.Vector2Normalize(ray) * thickness * .5
@@ -133,13 +146,15 @@ drawTriangle :: proc(position: hex.Axial, up: bool, color: rl.Color, scale := f3
 	rl.DrawTriangle(vx[0], vx[1], vx[2], color)
 }
 
-button :: proc(position: rl.Vector2, radius: f32, caption: rl.Texture2D, colors: [2]rl.Color, action: proc()) -> bool{
+button :: proc(position: rl.Vector2, radius: f32, caption: rl.Texture2D, colors: [2]rl.Color, action: proc(), disabled := false) -> bool{
 	vxOuter := hex.vertesexRaw(position, radius)
 	vxInner := hex.vertesexRaw(position, radius * .8)
 	hovered := rl.Vector2Length(rl.GetMousePosition() - position) < radius
+	borderColor := disabled ? rl.LIGHTGRAY : colors[hovered ? 0 : 1]
+	bgColor := colors[0]
 
-	rl.DrawTriangleFan(&vxOuter[0], 6, colors[hovered ? 0 : 1])
-	rl.DrawTriangleFan(&vxInner[0], 6, colors[0])
+	rl.DrawTriangleFan(&vxOuter[0], 6, borderColor)
+	rl.DrawTriangleFan(&vxInner[0], 6, bgColor)
 	
 	textureSize := [2]f32 {
 		f32(caption.width),
@@ -155,7 +170,7 @@ button :: proc(position: rl.Vector2, radius: f32, caption: rl.Texture2D, colors:
 	if hovered {
 		if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) do action()
 
-		return true
+		return !disabled
 	}
 
 	return false
@@ -163,7 +178,8 @@ button :: proc(position: rl.Vector2, radius: f32, caption: rl.Texture2D, colors:
 
 Button :: struct {
 	caption: ^rl.Texture2D,
-	action: proc()
+	action: proc(),
+	disabled: bool
 }
 
 buttonRow :: proc(origin: rl.Vector2, radius: f32, colors: [2]rl.Color, buttons: []Button) {
@@ -181,7 +197,8 @@ buttonRow :: proc(origin: rl.Vector2, radius: f32, colors: [2]rl.Color, buttons:
 			radius,
 			butt.caption^,
 			colors,
-			butt.action
+			butt.action,
+			butt.disabled
 		)
 		utils.setCursorHover(hovered)
 	}

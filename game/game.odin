@@ -29,8 +29,10 @@ GameGrid :: hex.Grid(hex.GridCell)
 
 GameUnitType :: enum { TONK, GUN, MCV }
 VISION := [GameUnitType] int { .TONK = 3, .GUN = 1, .MCV = 5}
+MOVING := [GameUnitType] int { .TONK = 2, .GUN = 0, .MCV = 3}
 
 GameUnit :: struct {
+	id: int,
 	position: hex.Axial,
 	type: GameUnitType,
 	gold: int,
@@ -40,7 +42,8 @@ GameUnit :: struct {
 PlayerState :: struct {
 	color: rl.Color,
 	units: [dynamic]GameUnit,
-	knownTerrain: [dynamic]hex.Axial
+	knownTerrain: [dynamic]hex.Axial,
+	unitIdCounter: int
 }
 
 GameState :: struct {
@@ -117,6 +120,7 @@ createGame :: proc() -> GameState {
 	for &player, i in state.players {
 		units := []GameUnit {
 			GameUnit {
+				id = 0,
 				position = spawnPoints[i],
 				type = .MCV,
 				gold = 2,
@@ -126,7 +130,8 @@ createGame :: proc() -> GameState {
 		player = PlayerState {
 			color = PLAYER_COLORS[i],
 			units = slice.clone_to_dynamic(units),
-			knownTerrain = make([dynamic]hex.Axial)
+			knownTerrain = make([dynamic]hex.Axial),
+			unitIdCounter = 1
 		}
 	}
 

@@ -18,58 +18,33 @@ ClientStatus :: enum {
 	CONNECTING, LOBBY, WAITING, PLAYING, FINISH
 }
 
-ClientState :: struct {
-	game: GameState,
-	serverSocket: net.TCP_Socket,
-	status: ClientStatus
-}
-
 UIState :: enum {
 	DISABLED, FREE, ORDER_MOV, ORDER_BLD, ORDER_ATK, ORDER_DIG
 }
 
-@(private="file")
+OrderType :: enum {
+	DIREKT, INDIREKT, BUILD, DIG, MOVE
+}
+
+Order :: struct {
+	type: OrderType,
+	target: hex.Axial
+}
+
+ClientState :: struct {
+	game: GameState,
+	serverSocket: net.TCP_Socket,
+	status: ClientStatus,
+	uiState: UIState,
+	orders: map[int]Order,
+	color: rl.Color,
+	currentPlayer: int
+}
+
+@(private)
 clientState := ClientState {
-	status = .CONNECTING
-}
-
-@(private="file")
-selectedUnit : ^GameUnit = nil
-
-BUTTON_ATK := ui.Button {
-	action = placeholder,
-	caption = &ui.UI_TEXT_ATK
-}
-BUTTON_DIG := ui.Button {
-	action = placeholder,
-	caption = &ui.UI_TEXT_DIG
-}
-BUTTON_MOV := ui.Button {
-	action = placeholder,
-	caption = &ui.UI_TEXT_MOV
-}
-BUTTON_BLD := ui.Button {
-	action = placeholder,
-	caption = &ui.UI_TEXT_BLD
-}
-
-BUTTON_ROWS := [GameUnitType][]ui.Button {
-	.TONK = {
-		BUTTON_ATK,
-		BUTTON_MOV
-	},
-	.GUN = {
-		BUTTON_ATK
-	},
-	.MCV = {
-		BUTTON_DIG,
-		BUTTON_MOV,
-		BUTTON_BLD
-	}
-}
-
-placeholder :: proc() {
-
+	status = .CONNECTING,
+	uiState = UIState.DISABLED
 }
 
 client :: proc() {
@@ -82,6 +57,7 @@ client :: proc() {
 	me := connect()
 
 	for !rl.WindowShouldClose() {
+		if clientState.status != .PLAYING do clientState.uiState = .DISABLED
 		ui.updateIO()
 		ui.draw(clientDrawWorld, clientDrawHUD)
 	}
@@ -96,44 +72,14 @@ clientDrawWorld :: proc() {
 	for &player in clientState.game.players {
 		for &unit in player.units {
 			unitHovered := drawUnit(unit.position, unit.type, player.color)
+			if player.color != clientState.color do return
+
 			utils.setCursorHover(unitHovered)
-			if rl.IsMouseButtonDown(rl.MouseButton.LEFT) do selectedUnit = &unit
-		}
-	}
-}
-
-@(private="file")
-clientDrawHUD :: proc() {
-	// fmt.ctprint(ui.pointedCell)
-	switch clientState.status {
-		case .CONNECTING: rl.DrawText("Connecting to server", 4, 4, 10, rl.BLACK)
-		case .LOBBY:      rl.DrawText("Waiting for players to join", 4, 4, 10, rl.BLACK)
-		case .PLAYING:    rl.DrawText("Your turn", 4, 4, 10, rl.RED)
-		case .WAITING:    rl.DrawText("Waiting for other players", 4, 4, 10, rl.BLACK)
-		case .FINISH:     rl.DrawText("Game over", 4, 4, 10, rl.BLACK)
-	}
-	framerate := math.round(1.0 / rl.GetFrameTime())
-	rl.DrawText(fmt.ctprint(framerate), 4, 16, 10, rl.RED)
-
-	if clientState.status == .PLAYING {
-		if selectedUnit != nil {
-			buttonSize := f32(32.0)
-			origin := rl.Vector2 {
-				f32(ui.WINDOW[0]) * .5,
-				f32(ui.WINDOW[1]) - buttonSize * 1.5
+			if clientState.uiState == .FREE && rl.IsMouseButtonDown(rl.MouseButton.LEFT) {
+				selectedUnit = &unit
 			}
-
-			ui.buttonRow(
-				origin,
-				buttonSize,
-				{
-					rl.WHITE,
-					rl.BLACK
-				},
-				BUTTON_ROWS[selectedUnit.type]
-			)
 		}
-	} else do selectedUnit = nil
+	}
 }
 
 @(private="file")
@@ -157,19 +103,37 @@ connect :: proc() -> uuid.Identifier {
 startListening :: proc() {
 	listener :: proc(t: ^thread.Thread) {
 		onPackage :: proc(_: net.TCP_Socket, header: networking.MessageHeader, payload: string) {
+			updateCurrentPlayer :: proc(color: rl.Color) {
+				for &player, index in clientState.game.players {
+					if player.color == color {
+						clientState.currentPlayer = index
+						return
+					}
+				}
+			}
+
 			fmt.printfln("server said %s: %s bytes", header.message, len(payload))
 			switch header.message {
 				case .JOIN: // ignored
 				case .UPDATE:
 					deleteState(clientState.game)
-					clientState.game = createGame()
 					decode(payload, &clientState.game)
+					updateCurrentPlayer(clientState.color)
+					if clientState.status == .CONNECTING {
+						fmt.println(clientState.game.players[clientState.currentPlayer])
+						spawn := clientState.game.players[clientState.currentPlayer].units[0].position
+						ui.camera.target = hex.axialToWorld(spawn)
+						fmt.println(spawn)
+					}
 					clientState.status = .LOBBY
 				case .ORDERS: // ignored
 				case .TURN: 
 					turnMessage: TurnMessage
 					decode(payload, &turnMessage)
+					clientState.color = turnMessage.yourColor
+					updateCurrentPlayer(clientState.color)
 					clientState.status = turnMessage.activeIsYou ? .PLAYING : .WAITING
+					if turnMessage.activeIsYou do clientState.uiState = .FREE
 			}
 		}
 
@@ -183,4 +147,3 @@ startListening :: proc() {
 		thread.start(t)
 	}
 }
-

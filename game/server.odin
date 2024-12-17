@@ -1,5 +1,7 @@
 package game
 
+import rl "vendor:raylib"
+
 import "core:fmt"
 import "core:net"
 import "core:thread"
@@ -30,7 +32,8 @@ Session :: struct {
 
 TurnMessage :: struct {
 	activePlayer: int,
-	activeIsYou: bool
+	activeIsYou: bool,
+	yourColor: rl.Color
 }
 
 server :: proc() {
@@ -123,6 +126,7 @@ onJoin :: proc(player: uuid.Identifier, socket: net.TCP_Socket) -> bool {
 		fmt.println("no slots available for player ", player)
 		return false
 	}
+	fmt.println("assigned slot ", freeSlot)
 
 	sendGameState(socket, freeSlot)
 	return true
@@ -154,7 +158,8 @@ sendTurnMessage :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	}
 	turnData := TurnMessage {
 		activePlayer = session.activePlayerIx,
-		activeIsYou = playerIndex == session.activePlayerIx
+		activeIsYou = playerIndex == session.activePlayerIx,
+		yourColor = session.game.players[playerIndex].color
 	}
 	networking.say(socket, &header, encode(turnData))
 }
