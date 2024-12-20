@@ -30,6 +30,15 @@ Session :: struct {
 	game: GameState
 }
 
+Update :: struct {
+	gameState: GameState,
+	meta: struct {
+		activePlayer: int,
+		activeIsYou: bool,
+		yourColor: rl.Color
+	}
+}
+
 TurnMessage :: struct {
 	activePlayer: int,
 	activeIsYou: bool,
@@ -82,7 +91,6 @@ clientWorker :: proc(t: ^thread.Thread) {
 			case .JOIN:
 				if onJoin(header.me, socket) do startGameIfFull()
 			case .UPDATE: //ignored
-			case .TURN: //ignored
 			case .ORDERS:
 		}
 	}
@@ -128,7 +136,7 @@ onJoin :: proc(player: uuid.Identifier, socket: net.TCP_Socket) -> bool {
 	}
 	fmt.println("assigned slot ", freeSlot)
 
-	sendGameState(socket, freeSlot)
+	sendUpdate(socket, freeSlot)
 	return true
 }
 
@@ -138,28 +146,25 @@ startGameIfFull :: proc() {
 
 	session.activePlayerIx = 0
 	for player, playerIndex in session.players {
-		sendTurnMessage(player.socket, playerIndex)
+		sendUpdate(player.socket, playerIndex)
 	}
 }
 
 @(private="file")
-sendGameState :: proc(socket: net.TCP_Socket, playerIndex: int) {
+sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	header := networking.MessageHeader {
 		message = .UPDATE,
 	}
-	game := getStateForPlayer(&session.game, playerIndex)
+	update := Update {
+		gameState = getStateForPlayer(&session.game, playerIndex),
+		meta = {
+			activePlayer = session.activePlayerIx,
+			activeIsYou = playerIndex == session.activePlayerIx,
+			yourColor = session.game.players[playerIndex].color
+		}
+	}
+
 	// gameJSON := encode(game)
-	networking.say(socket, &header, encode(game))
+	networking.say(socket, &header, encode(update))
 }
 
-sendTurnMessage :: proc(socket: net.TCP_Socket, playerIndex: int) {
-	header := networking.MessageHeader {
-		message = .TURN,
-	}
-	turnData := TurnMessage {
-		activePlayer = session.activePlayerIx,
-		activeIsYou = playerIndex == session.activePlayerIx,
-		yourColor = session.game.players[playerIndex].color
-	}
-	networking.say(socket, &header, encode(turnData))
-}

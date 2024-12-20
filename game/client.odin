@@ -46,6 +46,8 @@ clientState := ClientState {
 	status = .CONNECTING,
 	uiState = UIState.DISABLED
 }
+@(private="file")
+updateBuffer: Update
 
 client :: proc() {
 	rl.InitWindow(ui.WINDOW.x, ui.WINDOW.y, "SWGRedux")
@@ -104,6 +106,7 @@ startListening :: proc() {
 	listener :: proc(t: ^thread.Thread) {
 		onPackage :: proc(_: net.TCP_Socket, header: networking.MessageHeader, payload: string) {
 			updateCurrentPlayer :: proc(color: rl.Color) {
+				clientState.color = updateBuffer.meta.yourColor
 				for &player, index in clientState.game.players {
 					if player.color == color {
 						clientState.currentPlayer = index
@@ -112,28 +115,22 @@ startListening :: proc() {
 				}
 			}
 
-			fmt.printfln("server said %s: %s bytes", header.message, len(payload))
 			switch header.message {
 				case .JOIN: // ignored
 				case .UPDATE:
 					deleteState(clientState.game)
-					decode(payload, &clientState.game)
-					updateCurrentPlayer(clientState.color)
+					decode(payload, &updateBuffer)
+					clientState.game = updateBuffer.gameState
+
+					updateCurrentPlayer(updateBuffer.meta.yourColor)
+
 					if clientState.status == .CONNECTING {
-						fmt.println(clientState.game.players[clientState.currentPlayer])
 						spawn := clientState.game.players[clientState.currentPlayer].units[0].position
 						ui.camera.target = hex.axialToWorld(spawn)
-						fmt.println(spawn)
 					}
-					clientState.status = .LOBBY
+					clientState.status = updateBuffer.meta.activeIsYou ? .PLAYING : .WAITING
+					if updateBuffer.meta.activeIsYou do clientState.uiState = .FREE
 				case .ORDERS: // ignored
-				case .TURN: 
-					turnMessage: TurnMessage
-					decode(payload, &turnMessage)
-					clientState.color = turnMessage.yourColor
-					updateCurrentPlayer(clientState.color)
-					clientState.status = turnMessage.activeIsYou ? .PLAYING : .WAITING
-					if turnMessage.activeIsYou do clientState.uiState = .FREE
 			}
 		}
 

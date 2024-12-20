@@ -4,12 +4,14 @@ import "core:net"
 import "core:mem"
 import "core:slice"
 import "core:encoding/uuid"
+import "core:encoding/hex"
+import "core:crypto/hash"
 import "core:fmt"
 import "core:strings"
 
 PORT :: 8000
 
-Message :: enum { JOIN, UPDATE, TURN, ORDERS }
+Message :: enum { JOIN, UPDATE, ORDERS }
 MessageHeader :: struct {
 	message: Message,
 	me: uuid.Identifier,
@@ -52,6 +54,13 @@ listenBlocking :: proc(onPackage: proc(socket: net.TCP_Socket, header: MessageHe
 	for {
 		ok, header, payload := readPackage(socket)
 		if !ok do break
+		fmt.println(
+			"[net] hear",
+			header.message,
+			header.payloadSize == 0 ? "empty" : transmute(string)hex.encode(hash.hash_string(.SHA256, payload)),
+			len(payload),
+			"bytes"
+		)
 		onPackage(socket, header, payload)
 	}
 }
@@ -61,6 +70,15 @@ say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: string = ""
 	// bytes := transmute([^]u8)&payload;
 	headerSlice := mem.slice_ptr(header, 1)
 	headerBytes := slice.to_bytes(headerSlice)
+
+	fmt.println(
+		"[net] say",
+		header.message,
+		header.payloadSize == 0 ? "empty" : transmute(string)hex.encode(hash.hash_string(.SHA256, payload)),
+		len(payload),
+		"bytes"
+	)
+
 	net.send_tcp(socket, headerBytes)
 
 	if header.payloadSize > 0 {
