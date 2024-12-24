@@ -24,12 +24,24 @@ UI_TEXT_DIG: rl.Texture2D
 UI_TEXT_BLD: rl.Texture2D
 UI_TEXT_CLR: rl.Texture2D
 
+UI_TEXT_TNK: rl.Texture2D
+UI_TEXT_GUN: rl.Texture2D
+UI_TEXT_MCV: rl.Texture2D
+
 initTextTextures :: proc() {
-	imageMov := rl.ImageText("MOVE", 10, rl.BLACK)
-	imageAtk := rl.ImageText("ATACK", 10, rl.BLACK)
-	imageDig := rl.ImageText("DIG", 10, rl.BLACK)
-	imageBld := rl.ImageText("BUILD", 10, rl.BLACK)
-	imageClr := rl.ImageText("CLEAR", 10, rl.BLACK)
+	font := rl.GetFontDefault() // rl.LoadFont("./assets/JetBrainsMono-Regular.ttf")
+
+	fontSize :: 10
+	spacing :: 1
+	imageMov := rl.ImageTextEx(font, "MOVE", fontSize, spacing, rl.BLACK)
+	imageAtk := rl.ImageTextEx(font, "ATACK", fontSize, spacing, rl.BLACK)
+	imageDig := rl.ImageTextEx(font, "DIG", fontSize, spacing, rl.BLACK)
+	imageBld := rl.ImageTextEx(font, "BUILD", fontSize, spacing, rl.BLACK)
+	imageClr := rl.ImageTextEx(font, "CLEAR", fontSize, spacing, rl.BLACK)
+
+	imageTnk := rl.ImageTextEx(font, "TONK", fontSize, spacing, rl.BLACK)
+	imageGun := rl.ImageTextEx(font, "GUN", fontSize, spacing, rl.BLACK)
+	imageMcv := rl.ImageTextEx(font, "MCV", fontSize, spacing, rl.BLACK)
 
 	UI_TEXT_MOV = rl.LoadTextureFromImage(imageMov)
 	UI_TEXT_ATK = rl.LoadTextureFromImage(imageAtk)
@@ -37,11 +49,19 @@ initTextTextures :: proc() {
 	UI_TEXT_BLD = rl.LoadTextureFromImage(imageBld)
 	UI_TEXT_CLR = rl.LoadTextureFromImage(imageClr)
 
+	UI_TEXT_TNK = rl.LoadTextureFromImage(imageTnk)
+	UI_TEXT_GUN = rl.LoadTextureFromImage(imageGun)
+	UI_TEXT_MCV = rl.LoadTextureFromImage(imageMcv)
+
 	rl.UnloadImage(imageMov)
 	rl.UnloadImage(imageAtk)
 	rl.UnloadImage(imageDig)
 	rl.UnloadImage(imageBld)
 	rl.UnloadImage(imageClr)
+
+	rl.UnloadImage(imageTnk)
+	rl.UnloadImage(imageGun)
+	rl.UnloadImage(imageMcv)
 }
 
 updateIO :: proc() {
@@ -92,6 +112,7 @@ drawGrid :: proc(grid: hex.Grid(hex.GridCell)) {
 			rl.DrawTriangleFan(&vertesex[0], 6, color)
 		}
 	}
+	drawCellBorder(pointedCell, .2, rl.WHITE)
 }
 
 drawOutline :: proc(outline: []hex.Line, color: rl.Color = rl.BLACK) {
@@ -101,12 +122,29 @@ drawOutline :: proc(outline: []hex.Line, color: rl.Color = rl.BLACK) {
 	}
 }
 
+drawCellBorder :: proc(position: hex.Axial, thickness: f32, color: rl.Color) {
+	v0 := hex.vertesex(position, 1.0 - thickness)
+	v1 := hex.vertesex(position, 1.0)
+
+	vx := [14] rl.Vector2 {
+		v0[0], v1[0],
+		v0[1], v1[1],
+		v0[2], v1[2],
+		v0[3], v1[3],
+		v0[4], v1[4],
+		v0[5], v1[5],
+		v0[0], v1[0],
+	}
+
+	rl.DrawTriangleStrip(&vx[0], 14, color)
+}
+
 drawHexLine :: proc(from: hex.Axial, to: hex.Axial, thickness: f32, color: rl.Color = rl.BLACK) {
 	f := hex.axialToWorld(from)
 	t := hex.axialToWorld(to)
-	// ray := rl.Vector2Normalize(t - f)
-	// f += ray
-	// t += ray * -1
+	ray := rl.Vector2Normalize(t - f) * .5
+	f += ray
+	t += ray * -1
 	drawLine(f, t, thickness, color)
 }
 
@@ -146,11 +184,19 @@ drawTriangle :: proc(position: hex.Axial, up: bool, color: rl.Color, scale := f3
 	rl.DrawTriangle(vx[0], vx[1], vx[2], color)
 }
 
-button :: proc(position: rl.Vector2, radius: f32, caption: rl.Texture2D, colors: [2]rl.Color, action: proc(), disabled := false) -> bool{
+button :: proc(
+	position: rl.Vector2,
+	radius: f32,
+	caption: rl.Texture2D,
+	colors: [2]rl.Color,
+	action: proc(),
+	disabled := false,
+	disabledColor := rl.LIGHTGRAY
+) -> bool {
 	vxOuter := hex.vertesexRaw(position, radius)
 	vxInner := hex.vertesexRaw(position, radius * .8)
 	hovered := rl.Vector2Length(rl.GetMousePosition() - position) < radius
-	borderColor := disabled ? rl.LIGHTGRAY : colors[hovered ? 0 : 1]
+	borderColor := disabled ? disabledColor : colors[hovered ? 0 : 1]
 	bgColor := colors[0]
 
 	rl.DrawTriangleFan(&vxOuter[0], 6, borderColor)
@@ -161,16 +207,18 @@ button :: proc(position: rl.Vector2, radius: f32, caption: rl.Texture2D, colors:
 		f32(caption.height)
 	}
 
-	rl.DrawTextureV(
+	corner := position - textureSize / 2
+	rl.DrawTexture(
 		caption,
-		position - textureSize / 2,
+		i32(corner.x),
+		i32(corner.y),
 		rl.WHITE
 	)
 
-	if hovered {
+	if hovered && !disabled {
 		if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) do action()
 
-		return !disabled
+		return true
 	}
 
 	return false
@@ -182,7 +230,13 @@ Button :: struct {
 	disabled: bool
 }
 
-buttonRow :: proc(origin: rl.Vector2, radius: f32, colors: [2]rl.Color, buttons: []Button) {
+buttonRow :: proc(
+	origin: rl.Vector2,
+	radius: f32,
+	colors: [2]rl.Color,
+	buttons: []Button,
+	disabledColor := rl.LIGHTGRAY
+) {
 	buttonCount := len(buttons)
 
 	xStep := radius * 2.5
@@ -198,7 +252,8 @@ buttonRow :: proc(origin: rl.Vector2, radius: f32, colors: [2]rl.Color, buttons:
 			butt.caption^,
 			colors,
 			butt.action,
-			butt.disabled
+			butt.disabled,
+			disabledColor
 		)
 		utils.setCursorHover(hovered)
 	}

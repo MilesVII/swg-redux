@@ -189,6 +189,12 @@ getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 		}
 	}
 
+	for &cell, cellIndex in reducedState.grid.cells {
+		if cell.visible && cell.value.walkable {
+			cell.value.walkable = noUnitsAt(cell.position.axial, reducedState.players[:])
+		}
+	}
+
 	return reducedState
 }
 
@@ -227,4 +233,14 @@ drawUnit :: proc(position: hex.Axial, unit: GameUnitType, color: rl.Color) -> bo
 	}
 
 	return hovered
+}
+
+noUnitsAt :: proc (at: hex.Axial, players: []PlayerState) -> bool {
+	for player in players {
+		for unit in player.units {
+			if unit.position == at do return false
+		}
+	}
+
+	return true
 }

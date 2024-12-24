@@ -92,7 +92,7 @@ readPackage :: proc(socket: net.TCP_Socket) -> (bool, MessageHeader, string) {
 	headerSlice := mem.slice_ptr(&header, 1)
 	headerBuffer := slice.to_bytes(headerSlice)
 
-	_, e := net.recv_tcp(socket, headerBuffer[:])
+	_, e := net.recv_tcp(socket, headerBuffer)
 	if e != nil {
 		fmt.printfln("error while reading socket (header): %s", e)
 		return false, header, ""
@@ -103,7 +103,7 @@ readPackage :: proc(socket: net.TCP_Socket) -> (bool, MessageHeader, string) {
 	payloadBuffer := make([]u8, header.payloadSize)
 	defer delete(payloadBuffer)
 
-	_, e2 := net.recv_tcp(socket, payloadBuffer[:])
+	_, e2 := net.recv_tcp(socket, payloadBuffer)
 	if e2 != nil {
 		fmt.printfln("error while reading socket (payload): %s", e2)
 		return false, header, ""

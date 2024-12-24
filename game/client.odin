@@ -28,7 +28,8 @@ OrderType :: enum {
 
 Order :: struct {
 	type: OrderType,
-	target: hex.Axial
+	target: hex.Axial,
+	targetUnitType: GameUnitType
 }
 
 ClientState :: struct {

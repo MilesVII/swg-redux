@@ -11,6 +11,8 @@ import "hex"
 
 @(private)
 selectedUnit : ^GameUnit = nil
+@(private)
+selectedBuildingUnit : GameUnitType
 
 BUTTON_ATK := ui.Button {
 	action = proc() {
@@ -62,6 +64,27 @@ BUTTON_ROWS := [GameUnitType][]ui.Button {
 	}
 }
 
+BUTTON_ROW_BLD := [?]ui.Button {
+	{
+		action = proc() {
+			selectedBuildingUnit = .TONK
+		},
+		caption = &ui.UI_TEXT_TNK
+	},
+	{
+		action = proc() {
+			selectedBuildingUnit = .GUN
+		},
+		caption = &ui.UI_TEXT_GUN
+	},
+	{
+		action = proc() {
+			selectedBuildingUnit = .MCV
+		},
+		caption = &ui.UI_TEXT_MCV
+	}
+}
+
 @(private)
 clientDrawHUD :: proc() {
 	// fmt.ctprint(ui.pointedCell)
@@ -82,10 +105,32 @@ clientDrawHUD :: proc() {
 			}
 
 			if clientState.uiState == .ORDER_BLD {
-				// buildingAllowed := hex.distance(selectedUnit.position, ui.pointedCell) == 1
+				gridRadius := clientState.game.grid.radius
+				pointedIndex := hex.axialToIndex(ui.pointedCell, gridRadius)
+				buildingAllowed :=
+					hex.distance(selectedUnit.position, ui.pointedCell) == 1 && 
+					hex.isWithinGrid(ui.pointedCell, gridRadius) && 
+					clientState.game.grid.cells[pointedIndex].value.walkable
+
+				utils.setCursorHover(true)
+				rl.BeginMode2D(ui.camera)
+				ui.drawCellBorder(
+					ui.pointedCell,
+					.2,
+					rl.YELLOW
+				)
+				rl.EndMode2D()
 				
-				// buildingAllowed = buildingAllowed && clientState.game.grid.cells
-				// ui.drawLine(selectedUnit.position, ui.pointedCell, .3, rl.ORANGE)
+				if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+					order := Order {
+						target = ui.pointedCell,
+						targetUnitType = selectedBuildingUnit,
+						type = .BUILD
+					}
+					clientState.orders[selectedUnit.id] = order
+					clientState.uiState = .FREE
+					selectedUnit = nil
+				}
 			}
 			if clientState.uiState == .ORDER_MOV {
 				allowedCells := hex.findWalkableOutline(
@@ -96,11 +141,20 @@ clientDrawHUD :: proc() {
 				movingAllowed := utils.includes(allowedCells, &ui.pointedCell)
 				
 				if movingAllowed {
-					ui.drawLine(
-						hex.axialToWorld(selectedUnit.position),
-						hex.axialToWorld(ui.pointedCell),
-						1, rl.BLUE
+					utils.setCursorHover(true)
+					rl.BeginMode2D(ui.camera)
+					ui.drawHexLine(
+						selectedUnit.position,
+						ui.pointedCell,
+						.12, rl.BLUE
 					)
+					ui.drawCellBorder(
+						ui.pointedCell,
+						.2,
+						rl.BLUE
+					)
+					rl.EndMode2D()
+
 					if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
 						order := Order {
 							target = ui.pointedCell,
@@ -113,7 +167,34 @@ clientDrawHUD :: proc() {
 				}
 			}
 		}
+
+		rl.BeginMode2D(ui.camera)
+		drawOrders(clientState.orders)
+		rl.EndMode2D()
 	} else do selectedUnit = nil
+}
+
+drawOrders :: proc(orders: map[int]Order) {
+	for unitIndex, order in orders {
+		unit := clientState.game.players[clientState.currentPlayer].units[unitIndex]
+		switch order.type {
+			case .BUILD:
+			case .DIG:
+			case .DIREKT:
+			case .INDIREKT:
+			case .MOVE:
+				ui.drawHexLine(
+					unit.position,
+					order.target,
+					.12, rl.BLUE
+				)
+				ui.drawCellBorder(
+					order.target,
+					.2,
+					rl.BLUE
+				)
+		}
+	}
 }
 
 @(private="file")
@@ -136,5 +217,30 @@ drawOrdersControl :: proc() {
 			rl.BLACK
 		},
 		row
+	)
+}
+
+
+@(private="file")
+drawBuildUnitsControl :: proc() {
+	buttonSize := f32(32.0)
+	origin := rl.Vector2 {
+		f32(ui.WINDOW[0]) * .5,
+		f32(ui.WINDOW[1]) - buttonSize * 1.5
+	}
+
+	for &button, index in BUTTON_ROW_BLD {
+		button.disabled = index == int(selectedBuildingUnit)
+	}
+
+	ui.buttonRow(
+		origin,
+		buttonSize,
+		{
+			rl.WHITE,
+			rl.BLACK
+		},
+		BUTTON_ROW_BLD[:],
+		rl.RED
 	)
 }
