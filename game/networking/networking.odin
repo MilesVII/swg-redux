@@ -3,7 +3,6 @@ package networking
 import "core:net"
 import "core:mem"
 import "core:slice"
-import "core:encoding/uuid"
 import "core:encoding/hex"
 import "core:crypto/hash"
 import "core:fmt"
@@ -14,7 +13,7 @@ PORT :: 8000
 Message :: enum { JOIN, UPDATE, ORDERS }
 MessageHeader :: struct {
 	message: Message,
-	me: uuid.Identifier,
+	me: [16]rune,
 	payloadSize: u32
 }
 

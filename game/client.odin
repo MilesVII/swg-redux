@@ -5,7 +5,7 @@ import rl "vendor:raylib"
 import "core:fmt"
 import "core:net"
 import "core:thread"
-import "core:encoding/uuid"
+import "core:unicode/utf8"
 import "core:crypto"
 import "core:math"
 
@@ -50,14 +50,14 @@ clientState := ClientState {
 @(private="file")
 updateBuffer: Update
 
-client :: proc() {
+client :: proc(name: string) {
 	rl.InitWindow(ui.WINDOW.x, ui.WINDOW.y, "SWGRedux")
 	defer rl.CloseWindow()
 
 	rl.SetTargetFPS(240)
 	ui.initTextTextures()
 
-	me := connect()
+	connect(name)
 
 	for !rl.WindowShouldClose() {
 		if clientState.status != .PLAYING do clientState.uiState = .DISABLED
@@ -86,20 +86,17 @@ clientDrawWorld :: proc() {
 }
 
 @(private="file")
-connect :: proc() -> uuid.Identifier {
+connect :: proc(name: string) {
 	context.random_generator = crypto.random_generator()
 	clientState.serverSocket = networking.dial()
-	me := uuid.generate_v4()
 
 	startListening()
 
 	header := networking.MessageHeader {
 		message = .JOIN,
-		me = me
+		me = utils.stringToBadge(name)
 	}
 	networking.say(clientState.serverSocket, &header)
-
-	return me
 }
 
 @(private="file")

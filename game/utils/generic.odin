@@ -1,6 +1,7 @@
 package utils
 
 import rl "vendor:raylib"
+import "core:unicode/utf8"
 
 TAU :: (rl.PI * 2)
 
@@ -41,4 +42,22 @@ setCursorHover :: proc(hover: bool) {
 
 cursorHoverEnd :: proc() {
 	rl.SetMouseCursor(cursorHover ? rl.MouseCursor.POINTING_HAND : rl.MouseCursor.DEFAULT)
+}
+
+BadgeSize :: 16
+Badge :: [BadgeSize]rune
+
+stringToBadge :: proc(name: string) -> Badge {
+	r : Badge
+	runes := utf8.string_to_runes(name)
+	for c, i in name {
+		if i >= BadgeSize do break
+		r[i] = c
+	}
+	return r
+}
+
+badgeToString :: proc(badge: Badge) -> string {
+	badge := badge
+	return utf8.runes_to_string(badge[:])
 }

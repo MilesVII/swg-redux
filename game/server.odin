@@ -8,8 +8,8 @@ import "core:thread"
 import "core:sync"
 
 import "hex"
+import "utils"
 import "networking"
-import "core:encoding/uuid"
 
 @(private="file")
 socket : net.TCP_Socket
@@ -19,7 +19,7 @@ session : Session
 wg : sync.Wait_Group
 
 Player :: struct {
-	id: Maybe(uuid.Identifier),
+	id: Maybe(string),
 	online: bool,
 	socket: net.TCP_Socket
 }
@@ -89,7 +89,7 @@ clientWorker :: proc(t: ^thread.Thread) {
 		if header.payloadSize > 0 do fmt.printfln("payload: %s", payload)
 		switch header.message {
 			case .JOIN:
-				if onJoin(header.me, socket) do startGameIfFull()
+				if onJoin(utils.badgeToString(header.me), socket) do startGameIfFull()
 			case .UPDATE: //ignored
 			case .ORDERS:
 		}
@@ -106,7 +106,7 @@ clientWorker :: proc(t: ^thread.Thread) {
 }
 
 @(private="file")
-onJoin :: proc(player: uuid.Identifier, socket: net.TCP_Socket) -> bool {
+onJoin :: proc(player: string, socket: net.TCP_Socket) -> bool {
 	freeSlot := -1
 	for &p, index in session.players {
 		id, exists := p.id.?
