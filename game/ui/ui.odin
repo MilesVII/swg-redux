@@ -68,23 +68,22 @@ updateIO :: proc() {
 	dt := rl.GetFrameTime()
 	pointer = rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
 
-	if rl.IsKeyDown(rl.KeyboardKey.E) do camera.zoom += 0.1
-	if rl.IsKeyDown(rl.KeyboardKey.Q) do camera.zoom -= 0.1
+	if rl.IsKeyDown(.E) do camera.zoom += 0.1
+	if rl.IsKeyDown(.Q) do camera.zoom -= 0.1
 	if camera.zoom < .1 do camera.zoom = .1
 
 	cameraDelta := rl.Vector2 {0, 0}
-	if rl.IsMouseButtonDown(rl.MouseButton.LEFT) {
+	if rl.IsMouseButtonDown(.LEFT) {
 		mouseDelta := rl.GetMouseDelta()
 		cameraDelta += mouseDelta
 	}
 
 	keyboardDelta := rl.Vector2 {0, 0}
-	if rl.IsKeyDown(rl.KeyboardKey.W) do keyboardDelta += {0, -1} // raysan you baka
-	if rl.IsKeyDown(rl.KeyboardKey.A) do keyboardDelta += {-1, 0}
-	if rl.IsKeyDown(rl.KeyboardKey.S) do keyboardDelta += {0, 1} // y is up ffs
-	if rl.IsKeyDown(rl.KeyboardKey.D) do keyboardDelta += {1, 0}
+	if rl.IsKeyDown(.W) do keyboardDelta += {0, -1} // raysan you baka
+	if rl.IsKeyDown(.A) do keyboardDelta += {-1, 0}
+	if rl.IsKeyDown(.S) do keyboardDelta += {0, 1} // y is up ffs
+	if rl.IsKeyDown(.D) do keyboardDelta += {1, 0}
 	keyboardDelta = rl.Vector2Normalize(keyboardDelta) * camera.zoom * -1 * .12
-	fmt.println(camera.zoom)
 
 	camera.offset += cameraDelta + keyboardDelta
 
@@ -201,6 +200,7 @@ button :: proc(
 	caption: rl.Texture2D,
 	colors: [2]rl.Color,
 	action: proc(),
+	hotkey: rl.KeyboardKey,
 	disabled := false,
 	disabledColor := rl.LIGHTGRAY
 ) -> bool {
@@ -231,6 +231,7 @@ button :: proc(
 
 		return true
 	}
+	if rl.IsKeyPressed(hotkey) && !disabled do action()
 
 	return false
 }
@@ -238,7 +239,12 @@ button :: proc(
 Button :: struct {
 	caption: ^rl.Texture2D,
 	action: proc(),
-	disabled: bool
+	disabled: bool,
+	hotkey: rl.KeyboardKey
+}
+
+BUTTON_ROW_HOTKEYS := []rl.KeyboardKey {
+	.Z, .X, .C, .V, .B
 }
 
 buttonRow :: proc(
@@ -263,6 +269,7 @@ buttonRow :: proc(
 			butt.caption^,
 			colors,
 			butt.action,
+			BUTTON_ROW_HOTKEYS[i],
 			butt.disabled,
 			disabledColor
 		)

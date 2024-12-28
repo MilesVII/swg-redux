@@ -18,7 +18,7 @@ BUTTON_ATK := ui.Button {
 	action = proc() {
 		clientState.uiState = .ORDER_ATK
 	},
-	caption = &ui.UI_TEXT_ATK
+	caption = &ui.UI_TEXT_ATK,
 }
 BUTTON_DIG := ui.Button {
 	action = proc() {

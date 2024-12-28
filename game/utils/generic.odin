@@ -41,7 +41,7 @@ setCursorHover :: proc(hover: bool) {
 }
 
 cursorHoverEnd :: proc() {
-	rl.SetMouseCursor(cursorHover ? rl.MouseCursor.POINTING_HAND : rl.MouseCursor.DEFAULT)
+	rl.SetMouseCursor(cursorHover ? .POINTING_HAND : .DEFAULT)
 }
 
 BadgeSize :: 16
