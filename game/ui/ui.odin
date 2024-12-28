@@ -68,15 +68,26 @@ updateIO :: proc() {
 	dt := rl.GetFrameTime()
 	pointer = rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
 
-	if rl.IsKeyDown(rl.KeyboardKey.RIGHT) do camera.zoom += 0.1
-	else if rl.IsKeyDown(rl.KeyboardKey.LEFT) do camera.zoom -= 0.1
+	if rl.IsKeyDown(rl.KeyboardKey.E) do camera.zoom += 0.1
+	if rl.IsKeyDown(rl.KeyboardKey.Q) do camera.zoom -= 0.1
 	if camera.zoom < .1 do camera.zoom = .1
 
+	cameraDelta := rl.Vector2 {0, 0}
 	if rl.IsMouseButtonDown(rl.MouseButton.LEFT) {
 		mouseDelta := rl.GetMouseDelta()
-		camera.offset += mouseDelta
+		cameraDelta += mouseDelta
 	}
-	
+
+	keyboardDelta := rl.Vector2 {0, 0}
+	if rl.IsKeyDown(rl.KeyboardKey.W) do keyboardDelta += {0, -1} // raysan you baka
+	if rl.IsKeyDown(rl.KeyboardKey.A) do keyboardDelta += {-1, 0}
+	if rl.IsKeyDown(rl.KeyboardKey.S) do keyboardDelta += {0, 1} // y is up ffs
+	if rl.IsKeyDown(rl.KeyboardKey.D) do keyboardDelta += {1, 0}
+	keyboardDelta = rl.Vector2Normalize(keyboardDelta) * camera.zoom * -1 * .12
+	fmt.println(camera.zoom)
+
+	camera.offset += cameraDelta + keyboardDelta
+
 	pointedCell = hex.worldToAxial(pointer)
 }
 
