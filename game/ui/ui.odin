@@ -28,6 +28,9 @@ UI_TEXT_TNK: rl.Texture2D
 UI_TEXT_GUN: rl.Texture2D
 UI_TEXT_MCV: rl.Texture2D
 
+UI_TEXT_SUB: rl.Texture2D
+// UI_TEXT_MCV: rl.Texture2D
+
 initTextTextures :: proc() {
 	font := rl.GetFontDefault() // rl.LoadFont("./assets/JetBrainsMono-Regular.ttf")
 
@@ -43,6 +46,8 @@ initTextTextures :: proc() {
 	imageGun := rl.ImageTextEx(font, "GUN", fontSize, spacing, rl.BLACK)
 	imageMcv := rl.ImageTextEx(font, "MCV", fontSize, spacing, rl.BLACK)
 
+	imageSub := rl.ImageTextEx(font, "SUBMIT", fontSize, spacing, rl.BLACK)
+
 	UI_TEXT_MOV = rl.LoadTextureFromImage(imageMov)
 	UI_TEXT_ATK = rl.LoadTextureFromImage(imageAtk)
 	UI_TEXT_DIG = rl.LoadTextureFromImage(imageDig)
@@ -53,6 +58,8 @@ initTextTextures :: proc() {
 	UI_TEXT_GUN = rl.LoadTextureFromImage(imageGun)
 	UI_TEXT_MCV = rl.LoadTextureFromImage(imageMcv)
 
+	UI_TEXT_SUB = rl.LoadTextureFromImage(imageSub)
+
 	rl.UnloadImage(imageMov)
 	rl.UnloadImage(imageAtk)
 	rl.UnloadImage(imageDig)
@@ -62,6 +69,8 @@ initTextTextures :: proc() {
 	rl.UnloadImage(imageTnk)
 	rl.UnloadImage(imageGun)
 	rl.UnloadImage(imageMcv)
+
+	rl.UnloadImage(imageSub)
 }
 
 updateIO :: proc() {

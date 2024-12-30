@@ -171,6 +171,7 @@ clientDrawHUD :: proc() {
 		rl.BeginMode2D(ui.camera)
 		drawOrders(clientState.orders)
 		rl.EndMode2D()
+		drawTurnControl()
 	} else do selectedUnit = nil
 }
 
@@ -243,4 +244,35 @@ drawBuildUnitsControl :: proc() {
 		BUTTON_ROW_BLD[:],
 		rl.RED
 	)
+}
+
+drawTurnControl :: proc() {
+	buttonSize := f32(32.0)
+	orgn := rl.Vector2 {
+		f32(ui.WINDOW[0]) - buttonSize * 2.5,
+		buttonSize * 1.5
+	}
+
+	ui.button(
+		orgn,
+		buttonSize,
+		ui.UI_TEXT_SUB,
+		{
+			rl.WHITE,
+			rl.BLACK
+		},
+		clientSayOrders,
+		.ENTER
+	)
+	// ui.button(
+	// 	orgn + (hex.BASIS_Y * 2 * buttonSize),
+	// 	buttonSize,
+	// 	ui.UI_TEXT_ATK,
+	// 	{
+	// 		rl.WHITE,
+	// 		rl.BLACK
+	// 	},
+	// 	proc(){},
+	// 	.ENTER
+	// )
 }

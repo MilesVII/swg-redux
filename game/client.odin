@@ -32,20 +32,23 @@ Order :: struct {
 	targetUnitType: GameUnitType
 }
 
+OrderSet :: map[int]Order
+
 ClientState :: struct {
 	game: GameState,
 	serverSocket: net.TCP_Socket,
 	status: ClientStatus,
 	uiState: UIState,
-	orders: map[int]Order,
+	orders: OrderSet,
 	color: rl.Color,
-	currentPlayer: int
+	currentPlayer: int,
+	name: string
 }
 
 @(private)
 clientState := ClientState {
 	status = .CONNECTING,
-	uiState = UIState.DISABLED
+	uiState = UIState.DISABLED,
 }
 @(private="file")
 updateBuffer: Update
@@ -57,7 +60,8 @@ client :: proc(name: string) {
 	rl.SetTargetFPS(240)
 	ui.initTextTextures()
 
-	connect(name)
+	clientState.name = name
+	connect()
 
 	for !rl.WindowShouldClose() {
 		if clientState.status != .PLAYING do clientState.uiState = .DISABLED
@@ -86,7 +90,7 @@ clientDrawWorld :: proc() {
 }
 
 @(private="file")
-connect :: proc(name: string) {
+connect :: proc() {
 	context.random_generator = crypto.random_generator()
 	clientState.serverSocket = networking.dial()
 
@@ -94,7 +98,7 @@ connect :: proc(name: string) {
 
 	header := networking.MessageHeader {
 		message = .JOIN,
-		me = utils.stringToBadge(name)
+		me = utils.stringToBadge(clientState.name)
 	}
 	networking.say(clientState.serverSocket, &header)
 }
@@ -141,4 +145,14 @@ startListening :: proc() {
 		t.user_index = 0
 		thread.start(t)
 	}
+}
+
+@(private)
+clientSayOrders :: proc() {
+	header := networking.MessageHeader {
+		message = .ORDERS,
+		me = utils.stringToBadge(clientState.name)
+	}
+
+	networking.say(clientState.serverSocket, &header, encode(clientState.orders))
 }

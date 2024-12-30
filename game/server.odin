@@ -45,6 +45,8 @@ TurnMessage :: struct {
 	yourColor: rl.Color
 }
 
+serverOrderBuffer: OrderSet
+
 server :: proc() {
 	socket = networking.openServerSocket()
 
@@ -86,12 +88,19 @@ startThread :: proc(socket: ^net.TCP_Socket, userIndex: int) {
 clientWorker :: proc(t: ^thread.Thread) {
 	onPackage :: proc(socket: net.TCP_Socket, header: networking.MessageHeader, payload: string) {
 		fmt.printfln("player %s said %s", header.me, header.message)
+		playerName := utils.badgeToString(header.me)
 		if header.payloadSize > 0 do fmt.printfln("payload: %s", payload)
 		switch header.message {
 			case .JOIN:
 				if onJoin(utils.badgeToString(header.me), socket) do startGameIfFull()
 			case .UPDATE: //ignored
 			case .ORDERS:
+				if (session.players[session.activePlayerIx].id != playerName) do break
+
+				clear(&serverOrderBuffer)
+				decode(payload, &serverOrderBuffer)
+
+				fmt.println(serverOrderBuffer)
 		}
 	}
 
