@@ -100,7 +100,15 @@ clientWorker :: proc(t: ^thread.Thread) {
 				clear(&serverOrderBuffer)
 				decode(payload, &serverOrderBuffer)
 
-				fmt.println(serverOrderBuffer)
+				for unitId in serverOrderBuffer {
+					executeOrder(session.activePlayerIx, unitId, serverOrderBuffer[unitId])
+				}
+
+				session.activePlayerIx += 1
+				if session.activePlayerIx >= PLAYER_COUNT {
+					session.activePlayerIx = 0
+				}
+				broadcastUpdates()
 		}
 	}
 
@@ -154,6 +162,11 @@ startGameIfFull :: proc() {
 	for player in session.players do if !player.online do return
 
 	session.activePlayerIx = 0
+	broadcastUpdates()
+}
+
+@(private="file")
+broadcastUpdates :: proc() {
 	for player, playerIndex in session.players {
 		sendUpdate(player.socket, playerIndex)
 	}
@@ -177,3 +190,26 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	networking.say(socket, &header, encode(update))
 }
 
+executeOrder :: proc(playerIx: int, unitId: int, order: Order) {
+	unit, ok := findUnitById(session.game.players[playerIx].units[:], unitId)
+	if !ok do return
+
+	switch order.type {
+		case .BUILD: 
+			newUnit := GameUnit {
+				position = order.target,
+				type = order.targetUnitType
+			}
+			append(&session.game.players[playerIx].units, newUnit)
+		case .DIG:
+			cellIx := hex.axialToIndex(order.target, session.game.grid.radius)
+			session.game.grid.cells[cellIx].value.gold -= 1
+			unit.gold += 1
+		case .DIREKT:
+			// todo
+		case .INDIREKT:
+			// todo
+		case .MOVE:
+			unit.position = order.target
+	}
+}

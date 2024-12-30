@@ -180,9 +180,34 @@ drawOrders :: proc(orders: map[int]Order) {
 		unit := clientState.game.players[clientState.currentPlayer].units[unitIndex]
 		switch order.type {
 			case .BUILD:
+				ui.drawCellBorder(
+					order.target,
+					.2, rl.ORANGE
+				)
 			case .DIG:
+				ui.drawCellBorder(
+					order.target,
+					.2, rl.DARKGRAY
+				)
 			case .DIREKT:
+				ui.drawHexLine(
+					unit.position,
+					order.target,
+					.12, rl.RED
+				)
+				ui.drawCellBorder(
+					order.target,
+					.2, rl.RED
+				)
 			case .INDIREKT:
+				ui.drawHexLine(
+					unit.position,
+					order.target,
+					.12, rl.RED
+				)
+				area := hex.nbs(order.target)
+				lines := hex.outline(area[:], .2)
+				ui.drawOutline(lines, rl.RED)
 			case .MOVE:
 				ui.drawHexLine(
 					unit.position,
@@ -191,8 +216,7 @@ drawOrders :: proc(orders: map[int]Order) {
 				)
 				ui.drawCellBorder(
 					order.target,
-					.2,
-					rl.BLUE
+					.2, rl.BLUE
 				)
 		}
 	}

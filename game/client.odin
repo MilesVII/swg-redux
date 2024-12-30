@@ -121,6 +121,8 @@ startListening :: proc() {
 				case .JOIN: // ignored
 				case .UPDATE:
 					deleteState(clientState.game)
+					clear(&clientState.orders)
+
 					decode(payload, &updateBuffer)
 					clientState.game = updateBuffer.gameState
 

@@ -241,7 +241,7 @@ drawUnit :: proc(position: hex.Axial, unit: GameUnitType, color: rl.Color) -> bo
 	return hovered
 }
 
-noUnitsAt :: proc (at: hex.Axial, players: []PlayerState) -> bool {
+noUnitsAt :: proc(at: hex.Axial, players: []PlayerState) -> bool {
 	for player in players {
 		for unit in player.units {
 			if unit.position == at do return false
@@ -249,4 +249,11 @@ noUnitsAt :: proc (at: hex.Axial, players: []PlayerState) -> bool {
 	}
 
 	return true
+}
+
+findUnitById :: proc(units: []GameUnit, id: int) -> (^GameUnit, bool) {
+	for &unit, i in units {
+		if unit.id == id do return &(units[i]), true
+	}
+	return nil, false
 }
