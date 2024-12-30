@@ -52,7 +52,8 @@ GridCell :: struct {
 	walkable: bool,
 	seethrough: bool,
 	mainArea: bool,
-	fog: Fog
+	fog: Fog,
+	gold: int
 }
 
 grid :: proc(radius: int, $Value: typeid) -> Grid(Value) {
@@ -150,4 +151,16 @@ axialToIndex :: proc(v: Axial, radius: int) -> int {
 
 isWithinGrid :: proc(cell: Axial, gridRadius: int) -> bool {
 	return distance(cell, {0, 0}) <= gridRadius
+}
+
+nbs :: proc(cell: Axial) -> [7]Axial {
+	return {
+		cell,
+		cell + AXIAL_NBS[0],
+		cell + AXIAL_NBS[1],
+		cell + AXIAL_NBS[2],
+		cell + AXIAL_NBS[3],
+		cell + AXIAL_NBS[4],
+		cell + AXIAL_NBS[5]
+	}
 }

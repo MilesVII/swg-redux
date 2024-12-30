@@ -129,6 +129,11 @@ drawGrid :: proc(grid: hex.Grid(hex.GridCell)) {
 			if cell.value.fog == .TERRAIN do color.w = 120
 			vertesex := cell.vertesex;
 			rl.DrawTriangleFan(&vertesex[0], 6, color)
+
+			if cell.value.gold > 0 {
+				gvx := hex.vertesex(cell.position.axial, .5);
+				rl.DrawTriangleFan(&gvx[0], 6, rl.GOLD)
+			}
 		}
 	}
 	drawCellBorder(pointedCell, .2, rl.WHITE)

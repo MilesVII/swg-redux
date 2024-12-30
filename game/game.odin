@@ -11,6 +11,8 @@ MAP_RADIUS :: 16
 HEIGHTS :: 11
 PLAYER_COUNT :: 2
 
+MOUNTAIN_COLOR := rl.Color{154, 66, 66, 255}
+
 colors : [HEIGHTS]rl.Color = {
 	rl.BLUE,
 	rl.BLUE,
@@ -21,8 +23,8 @@ colors : [HEIGHTS]rl.Color = {
 	rl.GREEN,
 	rl.GREEN,
 	rl.YELLOW,
-	{154, 66, 66, 255},
-	{154, 66, 66, 255}
+	MOUNTAIN_COLOR,
+	MOUNTAIN_COLOR
 }
 
 GameGrid :: hex.Grid(hex.GridCell)
@@ -103,12 +105,15 @@ createGame :: proc() -> GameState {
 
 	for &cell in state.grid.cells {
 		hi := hex.height(cell.position.world, HEIGHTS)
+		color := colors[hi]
+		goldCell := color == rl.YELLOW
 
 		cell.value = {
-			color = colors[hi],
+			color = goldCell ? MOUNTAIN_COLOR : color,
 			walkable = hi < 8 && hi > 2,
 			seethrough = hi < 8,
-			fog = .FOG
+			fog = .FOG,
+			gold = goldCell ? 1 : 0
 		}
 	}
 	hex.markWalkableAreas(state.grid)
@@ -169,7 +174,8 @@ getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 					walkable = false,
 					seethrough = false,
 					mainArea = false,
-					fog = .FOG
+					fog = .FOG,
+					gold = 0
 				}
 			} else do cell.value.fog = fallbackFogValue
 		}
