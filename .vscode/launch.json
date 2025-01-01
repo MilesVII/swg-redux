@@ -7,7 +7,7 @@
 			"preLaunchTask": "Build",
 			"name": "Client",
 			"program": "${workspaceFolder}/build/debug.exe",
-			"args": [],
+			"args": ["--name", "alpha"],
 			"cwd": "${workspaceFolder}"
 		},
 		{
@@ -16,7 +16,7 @@
 			"preLaunchTask": "Build",
 			"name": "Server",
 			"program": "${workspaceFolder}/build/debug.exe",
-			"args": ["server"],
+			"args": ["--mode", "server"],
 			"cwd": "${workspaceFolder}"
 		},
 		{
@@ -25,7 +25,7 @@
 			"preLaunchTask": "Build",
 			"name": "Debug",
 			"program": "${workspaceFolder}/build/debug.exe",
-			"args": ["debug"],
+			"args": ["--mode", "debug"],
 			"cwd": "${workspaceFolder}"
 		}
 	]
