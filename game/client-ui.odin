@@ -138,7 +138,7 @@ clientDrawHUD :: proc() {
 					selectedUnit.position,
 					MOVING[selectedUnit.type]
 				)
-				movingAllowed := utils.includes(allowedCells, &ui.pointedCell)
+				movingAllowed := ui.pointedCell != selectedUnit.position && utils.includes(allowedCells, &ui.pointedCell)
 				
 				if movingAllowed {
 					utils.setCursorHover(true)
@@ -171,13 +171,17 @@ clientDrawHUD :: proc() {
 		rl.BeginMode2D(ui.camera)
 		drawOrders(clientState.orders)
 		rl.EndMode2D()
+
 		drawTurnControl()
 	} else do selectedUnit = nil
 }
 
 drawOrders :: proc(orders: map[int]Order) {
-	for unitIndex, order in orders {
-		unit := clientState.game.players[clientState.currentPlayer].units[unitIndex]
+	for unitId, order in orders {
+		if selectedUnit.id == unitId do continue
+		unit, ok := findUnitById(clientState.game.players[clientState.currentPlayer].units[:], unitId)
+		if !ok do continue
+		
 		switch order.type {
 			case .BUILD:
 				ui.drawCellBorder(
@@ -288,15 +292,20 @@ drawTurnControl :: proc() {
 		clientSayOrders,
 		.ENTER
 	)
-	// ui.button(
-	// 	orgn + (hex.BASIS_Y * 2 * buttonSize),
-	// 	buttonSize,
-	// 	ui.UI_TEXT_ATK,
-	// 	{
-	// 		rl.WHITE,
-	// 		rl.BLACK
-	// 	},
-	// 	proc(){},
-	// 	.ENTER
-	// )
+	if selectedUnit != nil && clientState.uiState != .FREE {
+		ui.button(
+			orgn + (hex.BASIS_Y * 2 * buttonSize),
+			buttonSize,
+			ui.UI_TEXT_ABT,
+			{
+				rl.WHITE,
+				rl.BLACK
+			},
+			proc() { 
+				selectedUnit = nil
+				clientState.uiState = .FREE
+			},
+			.ENTER
+		)
+	}
 }

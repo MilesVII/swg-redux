@@ -49,6 +49,7 @@ ClientState :: struct {
 clientState := ClientState {
 	status = .CONNECTING,
 	uiState = UIState.DISABLED,
+	orders = make(OrderSet)
 }
 @(private="file")
 updateBuffer: Update

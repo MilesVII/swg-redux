@@ -29,7 +29,7 @@ UI_TEXT_GUN: rl.Texture2D
 UI_TEXT_MCV: rl.Texture2D
 
 UI_TEXT_SUB: rl.Texture2D
-// UI_TEXT_MCV: rl.Texture2D
+UI_TEXT_ABT: rl.Texture2D
 
 initTextTextures :: proc() {
 	font := rl.GetFontDefault() // rl.LoadFont("./assets/JetBrainsMono-Regular.ttf")
@@ -47,6 +47,7 @@ initTextTextures :: proc() {
 	imageMcv := rl.ImageTextEx(font, "MCV", fontSize, spacing, rl.BLACK)
 
 	imageSub := rl.ImageTextEx(font, "SUBMIT", fontSize, spacing, rl.BLACK)
+	imageAbt := rl.ImageTextEx(font, "ABORT", fontSize, spacing, rl.BLACK)
 
 	UI_TEXT_MOV = rl.LoadTextureFromImage(imageMov)
 	UI_TEXT_ATK = rl.LoadTextureFromImage(imageAtk)
@@ -59,6 +60,7 @@ initTextTextures :: proc() {
 	UI_TEXT_MCV = rl.LoadTextureFromImage(imageMcv)
 
 	UI_TEXT_SUB = rl.LoadTextureFromImage(imageSub)
+	UI_TEXT_ABT = rl.LoadTextureFromImage(imageAbt)
 
 	rl.UnloadImage(imageMov)
 	rl.UnloadImage(imageAtk)
@@ -71,6 +73,7 @@ initTextTextures :: proc() {
 	rl.UnloadImage(imageMcv)
 
 	rl.UnloadImage(imageSub)
+	rl.UnloadImage(imageAbt)
 }
 
 updateIO :: proc() {
@@ -127,11 +130,11 @@ drawGrid :: proc(grid: hex.Grid(hex.GridCell)) {
 			}
 
 			if cell.value.fog == .TERRAIN do color.w = 120
-			vertesex := cell.vertesex;
+			vertesex := cell.vertesex
 			rl.DrawTriangleFan(&vertesex[0], 6, color)
 
 			if cell.value.gold > 0 {
-				gvx := hex.vertesex(cell.position.axial, .5);
+				gvx := hex.vertesex(cell.position.axial, .5)
 				rl.DrawTriangleFan(&gvx[0], 6, rl.GOLD)
 			}
 		}

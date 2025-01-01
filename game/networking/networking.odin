@@ -66,7 +66,7 @@ listenBlocking :: proc(onPackage: proc(socket: net.TCP_Socket, header: MessageHe
 
 say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: string = "") {
 	header.payloadSize = u32(len(payload))
-	// bytes := transmute([^]u8)&payload;
+	// bytes := transmute([^]u8)&payload
 	headerSlice := mem.slice_ptr(header, 1)
 	headerBytes := slice.to_bytes(headerSlice)
 

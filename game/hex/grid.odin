@@ -133,7 +133,7 @@ worldToAxial :: proc (v: rl.Vector2) -> Axial {
 		2.0 / 3.0 * v.y
 	} / size
 
-	fZ := -f.x - f.y;
+	fZ := -f.x - f.y
 	a := math.ceil(f.x - f.y)
 	b := math.ceil(f.y - fZ)
 	c := math.ceil(fZ - f.x)

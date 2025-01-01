@@ -30,8 +30,8 @@ colors : [HEIGHTS]rl.Color = {
 GameGrid :: hex.Grid(hex.GridCell)
 
 GameUnitType :: enum { TONK, GUN, MCV }
-VISION := [GameUnitType] int { .TONK = 3, .GUN = 1, .MCV = 5}
-MOVING := [GameUnitType] int { .TONK = 2, .GUN = 0, .MCV = 3}
+VISION := [GameUnitType] int { .TONK = 3, .GUN = 1, .MCV = 5 }
+MOVING := [GameUnitType] int { .TONK = 2, .GUN = 0, .MCV = 7 }
 
 GameUnit :: struct {
 	id: int,
