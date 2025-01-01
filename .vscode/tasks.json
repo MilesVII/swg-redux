@@ -10,13 +10,29 @@
 			"args": [
 				"/C",
 				"if not exist .\\build mkdir .\\build"
-			]
+			],
+			"presentation": {
+				"echo": false,
+				"reveal": "silent",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": false,
+				"clear": false
+			}
 		},
 		{
 			"label": "build",
 			"type": "shell",
 			"command": "odin build . -debug -out:build/debug.exe",
-			"group": "build"
+			"group": "build",
+			"presentation": {
+				"echo": false,
+				"reveal": "silent",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": false,
+				"clear": false
+			}
 		},
 		{
 			"label": "Build",
