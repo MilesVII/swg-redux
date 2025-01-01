@@ -98,87 +98,119 @@ clientDrawHUD :: proc() {
 	framerate := math.round(1.0 / rl.GetFrameTime())
 	rl.DrawText(fmt.ctprint(framerate), 4, 16, 10, rl.RED)
 
-	if clientState.status == .PLAYING {
-		if selectedUnit != nil {
-			if clientState.uiState == .FREE {
-				drawOrdersControl()
+	if clientState.status != .PLAYING {
+		selectedUnit = nil
+		return
+	}
+
+	rl.BeginMode2D(ui.camera)
+	drawOrders(clientState.orders)
+	rl.EndMode2D()
+
+	drawTurnControl()
+
+	if selectedUnit == nil do return
+
+	switch clientState.uiState {
+		case .DISABLED:
+		case .FREE:
+			drawOrdersControl()
+		case .ORDER_BLD:
+			gridRadius := clientState.game.grid.radius
+			pointedIndex := hex.axialToIndex(ui.pointedCell, gridRadius)
+			buildingAllowed :=
+				hex.distance(selectedUnit.position, ui.pointedCell) == 1 && 
+				hex.isWithinGrid(ui.pointedCell, gridRadius) && 
+				clientState.game.grid.cells[pointedIndex].value.walkable
+
+			utils.setCursorHover(true)
+			rl.BeginMode2D(ui.camera)
+			ui.drawCellBorder(
+				ui.pointedCell,
+				.2,
+				rl.YELLOW
+			)
+			rl.EndMode2D()
+			
+			if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+				order := Order {
+					target = ui.pointedCell,
+					targetUnitType = selectedBuildingUnit,
+					type = .BUILD
+				}
+				clientState.orders[selectedUnit.id] = order
+				clientState.uiState = .FREE
+				selectedUnit = nil
 			}
-
-			if clientState.uiState == .ORDER_BLD {
-				gridRadius := clientState.game.grid.radius
-				pointedIndex := hex.axialToIndex(ui.pointedCell, gridRadius)
-				buildingAllowed :=
-					hex.distance(selectedUnit.position, ui.pointedCell) == 1 && 
-					hex.isWithinGrid(ui.pointedCell, gridRadius) && 
-					clientState.game.grid.cells[pointedIndex].value.walkable
-
+		case .ORDER_MOV:
+			allowedCells := hex.findWalkableOutline(
+				clientState.game.grid,
+				selectedUnit.position,
+				MOVING[selectedUnit.type]
+			)
+			movingAllowed := ui.pointedCell != selectedUnit.position && utils.includes(allowedCells, &ui.pointedCell)
+			
+			if movingAllowed {
 				utils.setCursorHover(true)
 				rl.BeginMode2D(ui.camera)
+				ui.drawHexLine(
+					selectedUnit.position,
+					ui.pointedCell,
+					.12, rl.BLUE
+				)
 				ui.drawCellBorder(
 					ui.pointedCell,
 					.2,
-					rl.YELLOW
+					rl.BLUE
 				)
 				rl.EndMode2D()
-				
+
 				if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
 					order := Order {
 						target = ui.pointedCell,
-						targetUnitType = selectedBuildingUnit,
-						type = .BUILD
+						type = .MOVE
 					}
 					clientState.orders[selectedUnit.id] = order
 					clientState.uiState = .FREE
 					selectedUnit = nil
 				}
 			}
-			if clientState.uiState == .ORDER_MOV {
-				allowedCells := hex.findWalkableOutline(
-					clientState.game.grid,
-					selectedUnit.position,
-					MOVING[selectedUnit.type]
-				)
-				movingAllowed := ui.pointedCell != selectedUnit.position && utils.includes(allowedCells, &ui.pointedCell)
-				
-				if movingAllowed {
-					utils.setCursorHover(true)
-					rl.BeginMode2D(ui.camera)
-					ui.drawHexLine(
-						selectedUnit.position,
-						ui.pointedCell,
-						.12, rl.BLUE
-					)
-					ui.drawCellBorder(
-						ui.pointedCell,
-						.2,
-						rl.BLUE
-					)
-					rl.EndMode2D()
+		case .ORDER_DIG:
+			gridRadius := clientState.game.grid.radius
+			pointedIndex := hex.axialToIndex(ui.pointedCell, gridRadius)
+			buildingAllowed :=
+				hex.distance(selectedUnit.position, ui.pointedCell) == 1 && 
+				hex.isWithinGrid(ui.pointedCell, gridRadius) && 
+				clientState.game.grid.cells[pointedIndex].value.gold > 0
 
-					if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
-						order := Order {
-							target = ui.pointedCell,
-							type = .MOVE
-						}
-						clientState.orders[selectedUnit.id] = order
-						clientState.uiState = .FREE
-						selectedUnit = nil
-					}
-				}
+			utils.setCursorHover(true)
+			rl.BeginMode2D(ui.camera)
+			ui.drawCellBorder(
+				ui.pointedCell,
+				.2,
+				rl.GOLD
+			)
+			rl.EndMode2D()
+			
+			if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+				createOrder(selectedUnit.id, Order {
+					target = ui.pointedCell,
+					type = .DIG
+				})
 			}
-		}
+		case .ORDER_ATK:
+	}
+}
 
-		rl.BeginMode2D(ui.camera)
-		drawOrders(clientState.orders)
-		rl.EndMode2D()
-
-		drawTurnControl()
-	} else do selectedUnit = nil
+createOrder :: proc(unitId: int, order: Order) {
+	clientState.orders[unitId] = order
+	clientState.uiState = .FREE
+	selectedUnit = nil
 }
 
 drawOrders :: proc(orders: map[int]Order) {
 	for unitId, order in orders {
-		if selectedUnit.id == unitId do continue
+		if selectedUnit != nil && selectedUnit.id == unitId && clientState.uiState != .FREE do continue
 		unit, ok := findUnitById(clientState.game.players[clientState.currentPlayer].units[:], unitId)
 		if !ok do continue
 		
