@@ -100,18 +100,25 @@ readPackage :: proc(socket: net.TCP_Socket) -> (bool, MessageHeader, string) {
 	if header.payloadSize == 0 do return true, header, ""
 
 	payloadBuffer := make([]u8, header.payloadSize)
+	receivedSize: u32 = 0
+	payload := ""
 	defer delete(payloadBuffer)
+	for {
+		size, e2 := net.recv_tcp(socket, payloadBuffer)
+		receivedSize += u32(size)
+		if e2 != nil {
+			fmt.printfln("error while reading socket (payload): %s", e2)
+			return false, header, ""
+		}
 
-	_, e2 := net.recv_tcp(socket, payloadBuffer)
-	if e2 != nil {
-		fmt.printfln("error while reading socket (payload): %s", e2)
-		return false, header, ""
-	}
+		chunk, e3 := strings.clone_from_bytes(payloadBuffer[:size])
+		if e3 != nil {
+			fmt.printfln("failed to convert bytes to string: %s", e3)
+			return false, header, ""
+		}
+		payload = strings.concatenate({payload, chunk})
+		delete(chunk)
 
-	payload, e3 := strings.clone_from_bytes(payloadBuffer)
-	if e3 != nil {
-		fmt.printfln("failed to convert bytes to string: %s", e3)
-		return false, header, ""
+		if (receivedSize == header.payloadSize) do return true, header, payload
 	}
-	return true, header, payload
 }
