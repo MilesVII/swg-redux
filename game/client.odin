@@ -91,9 +91,13 @@ clientDrawWorld :: proc() {
 			if player.color != clientState.color do continue
 
 			utils.setCursorHover(unitHovered)
-			if clientState.uiState == .FREE && rl.IsMouseButtonDown(rl.MouseButton.LEFT) {
-				selectedUnit = &unit
-			}
+
+			shouldSelect :=
+				unitHovered &&
+				clientState.uiState == .FREE &&
+				rl.IsMouseButtonDown(rl.MouseButton.LEFT)
+			
+			if shouldSelect do selectedUnit = &unit
 		}
 	}
 }
