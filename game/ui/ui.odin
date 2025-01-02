@@ -193,11 +193,8 @@ drawLine :: proc(from: rl.Vector2, to: rl.Vector2, thickness: f32, color: rl.Col
 drawPath :: proc(path: hex.Path, thickness := f32(.4), color: rl.Color = rl.BLACK) {
 
 	for node, index in path {
-		// vx := hex.vertesex(node, thickness)
-		// rl.DrawTriangleFan(&vx[0], 6, color)
-		rl.DrawCircleV(hex.axialToWorld(node), thickness, color)
-
-		if index != len(path) - 1 {
+		if index != len(path) - 1 && index != 0 {
+			rl.DrawCircleV(hex.axialToWorld(node), thickness * .5, color)
 			f := hex.axialToWorld(node)
 			t := hex.axialToWorld(path[index + 1])
 			drawLine(f, t, thickness, color)

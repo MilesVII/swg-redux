@@ -143,27 +143,24 @@ clientDrawHUD :: proc() {
 				selectedUnit = nil
 			}
 		case .ORDER_MOV:
+			rl.BeginMode2D(ui.camera)
 			allowedCells := hex.findWalkableOutline(
 				clientState.game.grid,
 				selectedUnit.position,
 				MOVING[selectedUnit.type]
 			)
+			ui.drawOutline(hex.outline(allowedCells), rl.BLACK)
 			movingAllowed := ui.pointedCell != selectedUnit.position && utils.includes(allowedCells, &ui.pointedCell)
 			
 			if movingAllowed {
 				utils.setCursorHover(true)
-				rl.BeginMode2D(ui.camera)
-				ui.drawHexLine(
-					selectedUnit.position,
-					ui.pointedCell,
-					.12, rl.BLUE
-				)
+				path, _found := hex.findPath(clientState.game.grid, selectedUnit.position, ui.pointedCell)
+				ui.drawPath(path, .12, rl.BLUE)
 				ui.drawCellBorder(
 					ui.pointedCell,
 					.2,
 					rl.BLUE
 				)
-				rl.EndMode2D()
 
 				if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
 					order := Order {
@@ -175,28 +172,31 @@ clientDrawHUD :: proc() {
 					selectedUnit = nil
 				}
 			}
+			rl.EndMode2D()
 		case .ORDER_DIG:
 			gridRadius := clientState.game.grid.radius
 			pointedIndex := hex.axialToIndex(ui.pointedCell, gridRadius)
-			buildingAllowed :=
+			diggingAllowed :=
 				hex.distance(selectedUnit.position, ui.pointedCell) == 1 && 
 				hex.isWithinGrid(ui.pointedCell, gridRadius) && 
 				clientState.game.grid.cells[pointedIndex].value.gold > 0
 
-			utils.setCursorHover(true)
-			rl.BeginMode2D(ui.camera)
-			ui.drawCellBorder(
-				ui.pointedCell,
-				.2,
-				rl.GOLD
-			)
-			rl.EndMode2D()
-			
-			if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
-				createOrder(selectedUnit.id, Order {
-					target = ui.pointedCell,
-					type = .DIG
-				})
+			if diggingAllowed {
+				utils.setCursorHover(true)
+				rl.BeginMode2D(ui.camera)
+				ui.drawCellBorder(
+					ui.pointedCell,
+					.2,
+					rl.GOLD
+				)
+				rl.EndMode2D()
+				
+				if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+					createOrder(selectedUnit.id, Order {
+						target = ui.pointedCell,
+						type = .DIG
+					})
+				}
 			}
 		case .ORDER_ATK:
 	}
@@ -218,12 +218,12 @@ drawOrders :: proc(orders: map[int]Order) {
 			case .BUILD:
 				ui.drawCellBorder(
 					order.target,
-					.2, rl.ORANGE
+					.2, rl.DARKGRAY
 				)
 			case .DIG:
 				ui.drawCellBorder(
 					order.target,
-					.2, rl.DARKGRAY
+					.2, rl.GOLD
 				)
 			case .DIREKT:
 				ui.drawHexLine(
@@ -245,10 +245,11 @@ drawOrders :: proc(orders: map[int]Order) {
 				lines := hex.outline(area[:], .2)
 				ui.drawOutline(lines, rl.RED)
 			case .MOVE:
-				ui.drawHexLine(
-					unit.position,
+				path, _found := hex.findPath(clientState.game.grid, unit.position, order.target)
+				ui.drawPath(path, .12, rl.BLUE)
+				ui.drawCellBorder(
 					order.target,
-					.12, rl.BLUE
+					.2, rl.BLUE
 				)
 				ui.drawCellBorder(
 					order.target,
@@ -324,7 +325,7 @@ drawTurnControl :: proc() {
 		clientSayOrders,
 		.ENTER
 	)
-	if selectedUnit != nil && clientState.uiState != .FREE {
+	if selectedUnit != nil {
 		ui.button(
 			orgn + (hex.BASIS_Y * 2 * buttonSize),
 			buttonSize,
@@ -333,7 +334,7 @@ drawTurnControl :: proc() {
 				rl.WHITE,
 				rl.BLACK
 			},
-			proc() { 
+			proc() {
 				selectedUnit = nil
 				clientState.uiState = .FREE
 			},
