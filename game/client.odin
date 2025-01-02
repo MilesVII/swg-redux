@@ -55,6 +55,7 @@ clientState := ClientState {
 updateBuffer: Update
 
 client :: proc(name: string) {
+	rl.SetTraceLogLevel(.WARNING)
 	rl.InitWindow(ui.WINDOW.x, ui.WINDOW.y, "SWGRedux")
 	defer rl.CloseWindow()
 
@@ -80,7 +81,7 @@ clientDrawWorld :: proc() {
 	for &player in clientState.game.players {
 		for &unit in player.units {
 			unitHovered := drawUnit(unit.position, unit.type, player.color)
-			if player.color != clientState.color do return
+			if player.color != clientState.color do continue
 
 			utils.setCursorHover(unitHovered)
 			if clientState.uiState == .FREE && rl.IsMouseButtonDown(rl.MouseButton.LEFT) {
