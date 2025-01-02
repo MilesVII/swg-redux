@@ -191,13 +191,16 @@ drawLine :: proc(from: rl.Vector2, to: rl.Vector2, thickness: f32, color: rl.Col
 }
 
 drawPath :: proc(path: hex.Path, thickness := f32(.4), color: rl.Color = rl.BLACK) {
-
 	for node, index in path {
 		if index != len(path) - 1 && index != 0 {
 			rl.DrawCircleV(hex.axialToWorld(node), thickness * .5, color)
 			f := hex.axialToWorld(node)
 			t := hex.axialToWorld(path[index + 1])
 			drawLine(f, t, thickness, color)
+
+			if index + 1 == len(path) - 1 {
+				rl.DrawCircleV(hex.axialToWorld(path[index + 1]), thickness * .5, color)
+			}
 		}
 	}
 }
@@ -270,7 +273,7 @@ buttonRow :: proc(
 ) {
 	buttonCount := len(buttons)
 
-	xStep := radius * 2.5
+	xStep := radius * 2
 	width := xStep * f32(buttonCount - 1)
 	xStart := origin.x - width * .5
 
