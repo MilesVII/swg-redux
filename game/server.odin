@@ -66,9 +66,10 @@ server :: proc() {
 startListeningForClients :: proc() {
 	waitForClients :: proc(t: ^thread.Thread) {
 		for counter := 0; ; counter += 1 {
-			clientSocket := networking.waitForClient(receptionSocket)
+			clientSocket := new(net.TCP_Socket)
+			clientSocket^ = networking.waitForClient(receptionSocket)
 			fmt.printfln("new client, waiting for JOIN")
-			startClientThread(int(clientSocket))
+			startClientThread(clientSocket)
 		}
 	}
 
@@ -81,21 +82,22 @@ startListeningForClients :: proc() {
 }
 
 @(private="file")
-startClientThread :: proc(userIndex: int) {
+startClientThread :: proc(socket: ^net.TCP_Socket) {
 	clientWorker :: proc(t: ^thread.Thread) {
-		playerSocket := transmute(net.TCP_Socket)t.user_index
+		playerSocket := (transmute(^net.TCP_Socket)t.data)^
 		tx := networking.tx
 		networking.listenBlocking(tx, playerSocket)
 		// listenBlocking terminates if there's a socket error
 		for &player in session.players {
 			if player.socket == playerSocket do player.online = false
 		}
+		free(t.data)
 	}
 
 	t := thread.create(clientWorker)
 	if t != nil {
 		t.init_context = context
-		t.user_index = userIndex
+		t.data = socket
 		thread.start(t)
 	}
 }
