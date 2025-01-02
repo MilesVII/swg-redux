@@ -7,6 +7,7 @@ import "core:encoding/hex"
 import "core:crypto/hash"
 import "core:fmt"
 import "core:strings"
+import synchan "core:sync/chan"
 
 PORT :: 8000
 
@@ -15,6 +16,23 @@ MessageHeader :: struct {
 	message: Message,
 	me: [16]rune,
 	payloadSize: u32
+}
+Package :: struct {
+	header: MessageHeader,
+	payload: string
+}
+
+tx: synchan.Chan(Package, .Send)
+rx: synchan.Chan(Package, .Recv)
+
+init :: proc() {
+	channel, err := synchan.create_buffered(
+		synchan.Chan(Package),
+		16, context.allocator
+	)
+	if err != nil do fmt.panicf("failed to create sync channel: %s", err)
+	tx = synchan.as_send(channel)
+	rx = synchan.as_recv(channel)
 }
 
 openServerSocket :: proc() -> net.TCP_Socket {
@@ -49,7 +67,7 @@ waitForClient :: proc(socket: net.TCP_Socket) -> net.TCP_Socket {
 	return clientSocket
 }
 
-listenBlocking :: proc(onPackage: proc(socket: net.TCP_Socket, header: MessageHeader, payload: string), socket: net.TCP_Socket) {
+listenBlocking :: proc(channel: synchan.Chan(Package, .Send), socket: net.TCP_Socket) {
 	for {
 		ok, header, payload := readPackage(socket)
 		if !ok do break
@@ -60,7 +78,8 @@ listenBlocking :: proc(onPackage: proc(socket: net.TCP_Socket, header: MessageHe
 			len(payload),
 			"bytes"
 		)
-		onPackage(socket, header, payload)
+		
+		synchan.send(channel, Package { header, payload })
 	}
 }
 

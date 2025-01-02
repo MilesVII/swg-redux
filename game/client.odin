@@ -8,6 +8,7 @@ import "core:thread"
 import "core:unicode/utf8"
 import "core:crypto"
 import "core:math"
+import synchan "core:sync/chan"
 
 import "hex"
 import "ui"
@@ -62,10 +63,16 @@ client :: proc(name: string) {
 	rl.SetTargetFPS(240)
 	ui.initTextTextures()
 
+	networking.init()
 	clientState.name = name
 	connect()
 
 	for !rl.WindowShouldClose() {
+		for synchan.can_recv(networking.rx) {
+			data, ok := synchan.recv(networking.rx)
+			processPackage(data)
+		}
+
 		if clientState.status != .PLAYING do clientState.uiState = .DISABLED
 		ui.updateIO()
 		ui.draw(clientDrawWorld, clientDrawHUD)
@@ -106,41 +113,42 @@ connect :: proc() {
 }
 
 @(private="file")
-startListening :: proc() {
-	listener :: proc(t: ^thread.Thread) {
-		onPackage :: proc(_: net.TCP_Socket, header: networking.MessageHeader, payload: string) {
-			updateCurrentPlayer :: proc(color: rl.Color) {
-				clientState.color = updateBuffer.meta.yourColor
-				for &player, index in clientState.game.players {
-					if player.color == color {
-						clientState.currentPlayer = index
-						return
-					}
-				}
-			}
-
-			switch header.message {
-				case .JOIN: // ignored
-				case .UPDATE:
-					deleteState(clientState.game)
-					clear(&clientState.orders)
-
-					decode(payload, &updateBuffer)
-					clientState.game = updateBuffer.gameState
-
-					updateCurrentPlayer(updateBuffer.meta.yourColor)
-
-					if clientState.status == .CONNECTING {
-						spawn := clientState.game.players[clientState.currentPlayer].units[0].position
-						ui.camera.target = hex.axialToWorld(spawn)
-					}
-					clientState.status = updateBuffer.meta.activeIsYou ? .PLAYING : .WAITING
-					if updateBuffer.meta.activeIsYou do clientState.uiState = .FREE
-				case .ORDERS: // ignored
+processPackage :: proc(p: networking.Package) {
+	updateCurrentPlayer :: proc(color: rl.Color) {
+		clientState.color = updateBuffer.meta.yourColor
+		for &player, index in clientState.game.players {
+			if player.color == color {
+				clientState.currentPlayer = index
+				return
 			}
 		}
+	}
 
-		networking.listenBlocking(onPackage, clientState.serverSocket)
+	switch p.header.message {
+		case .JOIN: // ignored
+		case .UPDATE:
+			deleteState(clientState.game)
+			clear(&clientState.orders)
+
+			decode(p.payload, &updateBuffer)
+			clientState.game = updateBuffer.gameState
+
+			updateCurrentPlayer(updateBuffer.meta.yourColor)
+
+			if clientState.status == .CONNECTING {
+				spawn := clientState.game.players[clientState.currentPlayer].units[0].position
+				ui.camera.target = hex.axialToWorld(spawn)
+			}
+			clientState.status = updateBuffer.meta.activeIsYou ? .PLAYING : .WAITING
+			if updateBuffer.meta.activeIsYou do clientState.uiState = .FREE
+		case .ORDERS: // ignored
+	}
+}
+
+@(private="file")
+startListening :: proc() {
+	listener :: proc(t: ^thread.Thread) {
+		networking.listenBlocking(networking.tx, clientState.serverSocket)
 	}
 
 	t := thread.create(listener)

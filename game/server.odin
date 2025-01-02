@@ -5,7 +5,7 @@ import rl "vendor:raylib"
 import "core:fmt"
 import "core:net"
 import "core:thread"
-import "core:sync"
+import synchan "core:sync/chan"
 
 import "hex"
 import "utils"
@@ -15,8 +15,6 @@ import "networking"
 socket : net.TCP_Socket
 @(private="file")
 session : Session
-@(private="file")
-wg : sync.Wait_Group
 
 Player :: struct {
 	id: Maybe(string),
@@ -45,9 +43,13 @@ TurnMessage :: struct {
 	yourColor: rl.Color
 }
 
+@(private="file")
 serverOrderBuffer: OrderSet
+@(private="file")
+clientSockets: [dynamic]net.TCP_Socket
 
 server :: proc() {
+	networking.init()
 	socket = networking.openServerSocket()
 
 	session = Session {
@@ -56,70 +58,83 @@ server :: proc() {
 	for &player in session.players do player.online = false
 	session.game = createGame()
 	
-	waitForClients()
-	sync.wait_group_wait(&wg)
-}
+	startListeningForClients()
 
-@(private="file")
-waitForClients :: proc() {
-	connections : [dynamic] net.TCP_Socket
-
-	for counter := 0; ; counter += 1 {
-		clientSocket := networking.waitForClient(socket)
-		append(&connections, clientSocket)
-		fmt.printfln("new client, waiting for JOIN")
-		sync.wait_group_add(&wg, 1)
-		startThread(&connections[len(connections) - 1], counter)
+	for {
+		for synchan.can_recv(networking.rx) {
+			data, ok := synchan.recv(networking.rx)
+			processPackage(data)
+		}
 	}
 }
 
 @(private="file")
-startThread :: proc(socket: ^net.TCP_Socket, userIndex: int) {
+startListeningForClients :: proc() {
+	waitForClients :: proc(t: ^thread.Thread) {
+		for counter := 0; ; counter += 1 {
+			clientSocket := networking.waitForClient(socket)
+			append(&clientSockets, clientSocket)
+			fmt.printfln("new client, waiting for JOIN")
+			startClientThread(counter)
+		}
+	}
+
+	t := thread.create(waitForClients)
+	if t != nil {
+		t.init_context = context
+		t.user_index = 0
+		thread.start(t)
+	}
+}
+
+
+@(private="file")
+startClientThread :: proc(userIndex: int) {
 	t := thread.create(clientWorker)
 	if t != nil {
 		t.init_context = context
 		t.user_index = userIndex
-		t.data = socket
 		thread.start(t)
+	}
+}
+
+
+@(private="file")
+processPackage :: proc(p: networking.Package) {
+	fmt.printfln("player %s said %s", p.header.me, p.header.message)
+	playerName := utils.badgeToString(p.header.me)
+	if p.header.payloadSize > 0 do fmt.printfln("payload: %s", p.payload)
+	switch p.header.message {
+		case .JOIN:
+			if onJoin(utils.badgeToString(p.header.me), socket) do startGameIfFull()
+		case .UPDATE: //ignored
+		case .ORDERS:
+			if (session.players[session.activePlayerIx].id != playerName) do break
+
+			clear(&serverOrderBuffer)
+			decode(p.payload, &serverOrderBuffer)
+
+			for unitId in serverOrderBuffer {
+				executeOrder(session.activePlayerIx, unitId, serverOrderBuffer[unitId])
+			}
+
+			session.activePlayerIx += 1
+			if session.activePlayerIx >= PLAYER_COUNT {
+				session.activePlayerIx = 0
+			}
+			broadcastUpdates()
 	}
 }
 
 @(private="file")
 clientWorker :: proc(t: ^thread.Thread) {
-	onPackage :: proc(socket: net.TCP_Socket, header: networking.MessageHeader, payload: string) {
-		fmt.printfln("player %s said %s", header.me, header.message)
-		playerName := utils.badgeToString(header.me)
-		if header.payloadSize > 0 do fmt.printfln("payload: %s", payload)
-		switch header.message {
-			case .JOIN:
-				if onJoin(utils.badgeToString(header.me), socket) do startGameIfFull()
-			case .UPDATE: //ignored
-			case .ORDERS:
-				if (session.players[session.activePlayerIx].id != playerName) do break
-
-				clear(&serverOrderBuffer)
-				decode(payload, &serverOrderBuffer)
-
-				for unitId in serverOrderBuffer {
-					executeOrder(session.activePlayerIx, unitId, serverOrderBuffer[unitId])
-				}
-
-				session.activePlayerIx += 1
-				if session.activePlayerIx >= PLAYER_COUNT {
-					session.activePlayerIx = 0
-				}
-				broadcastUpdates()
-		}
-	}
-
-	playerSocket := (transmute(^net.TCP_Socket)t.data)^
-	networking.listenBlocking(onPackage, playerSocket)
+	playerSocket := clientSockets[t.user_index]
+	tx := networking.tx;
+	networking.listenBlocking(tx, playerSocket)
 	// listenBlocking terminates if there's a socket error
 	for &player in session.players {
 		if player.socket == playerSocket do player.online = false
 	}
-
-	sync.wait_group_done(&wg)
 }
 
 @(private="file")
