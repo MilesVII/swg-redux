@@ -28,20 +28,16 @@ Session :: struct {
 	game: GameState
 }
 
-Update :: struct {
-	gameState: GameState,
-	meta: struct {
-		activePlayer: int,
-		activeIsYou: bool,
-		yourColor: rl.Color
-	}
-}
-
 TurnMessage :: struct {
 	activePlayer: int,
 	activeIsYou: bool,
 	yourColor: rl.Color
 }
+Update :: struct {
+	gameState: GameState,
+	meta: TurnMessage
+}
+
 
 @(private="file")
 serverOrderBuffer: OrderSet
@@ -87,9 +83,18 @@ startListeningForClients :: proc() {
 	}
 }
 
-
 @(private="file")
 startClientThread :: proc(userIndex: int) {
+	clientWorker :: proc(t: ^thread.Thread) {
+		playerSocket := clientSockets[t.user_index]
+		tx := networking.tx
+		networking.listenBlocking(tx, playerSocket)
+		// listenBlocking terminates if there's a socket error
+		for &player in session.players {
+			if player.socket == playerSocket do player.online = false
+		}
+	}
+
 	t := thread.create(clientWorker)
 	if t != nil {
 		t.init_context = context
@@ -123,17 +128,6 @@ processPackage :: proc(p: networking.Package) {
 				session.activePlayerIx = 0
 			}
 			broadcastUpdates()
-	}
-}
-
-@(private="file")
-clientWorker :: proc(t: ^thread.Thread) {
-	playerSocket := clientSockets[t.user_index]
-	tx := networking.tx;
-	networking.listenBlocking(tx, playerSocket)
-	// listenBlocking terminates if there's a socket error
-	for &player in session.players {
-		if player.socket == playerSocket do player.online = false
 	}
 }
 

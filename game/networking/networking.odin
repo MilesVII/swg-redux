@@ -9,7 +9,7 @@ import "core:fmt"
 import "core:strings"
 import synchan "core:sync/chan"
 
-PORT :: 8000
+PORT :: 7420
 
 Message :: enum { JOIN, UPDATE, ORDERS }
 MessageHeader :: struct {
@@ -127,6 +127,7 @@ readPackage :: proc(socket: net.TCP_Socket) -> (bool, MessageHeader, string) {
 	return true, header, payload
 }
 
+@(private)
 fillBuffer :: proc(socket: net.TCP_Socket, buffer: []u8) -> bool {
 	receivedSize: u32 = 0
 	for {

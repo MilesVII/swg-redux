@@ -100,9 +100,7 @@ clientDrawWorld :: proc() {
 
 @(private="file")
 connect :: proc() {
-	context.random_generator = crypto.random_generator()
 	clientState.serverSocket = networking.dial()
-
 	startListening()
 
 	header := networking.MessageHeader {
