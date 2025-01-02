@@ -87,38 +87,37 @@ say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: string = ""
 
 @(private)
 readPackage :: proc(socket: net.TCP_Socket) -> (bool, MessageHeader, string) {
-	header : MessageHeader
+	header: MessageHeader
 	headerSlice := mem.slice_ptr(&header, 1)
 	headerBuffer := slice.to_bytes(headerSlice)
 
-	_, e := net.recv_tcp(socket, headerBuffer)
-	if e != nil {
-		fmt.printfln("error while reading socket (header): %s", e)
-		return false, header, ""
-	}
+	if !fillBuffer(socket, headerBuffer) do return false, header, ""
 
 	if header.payloadSize == 0 do return true, header, ""
 
 	payloadBuffer := make([]u8, header.payloadSize)
-	receivedSize: u32 = 0
-	payload := ""
 	defer delete(payloadBuffer)
+	if !fillBuffer(socket, payloadBuffer) do return false, header, ""
+
+	payload, e3 := strings.clone_from_bytes(payloadBuffer)
+	if e3 != nil {
+		fmt.printfln("failed to convert bytes to string: %s", e3)
+		return false, header, ""
+	}
+
+	return true, header, payload
+}
+
+fillBuffer :: proc(socket: net.TCP_Socket, buffer: []u8) -> bool {
+	receivedSize: u32 = 0
 	for {
-		size, e2 := net.recv_tcp(socket, payloadBuffer)
+		size, e2 := net.recv_tcp(socket, buffer[receivedSize:])
 		receivedSize += u32(size)
 		if e2 != nil {
-			fmt.printfln("error while reading socket (payload): %s", e2)
-			return false, header, ""
+			fmt.printfln("error while reading socket: %s", e2)
+			return false
 		}
 
-		chunk, e3 := strings.clone_from_bytes(payloadBuffer[:size])
-		if e3 != nil {
-			fmt.printfln("failed to convert bytes to string: %s", e3)
-			return false, header, ""
-		}
-		payload = strings.concatenate({payload, chunk})
-		delete(chunk)
-
-		if (receivedSize == header.payloadSize) do return true, header, payload
+		if (receivedSize == u32(len(buffer))) do return true
 	}
 }
