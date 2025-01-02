@@ -19,7 +19,8 @@ MessageHeader :: struct {
 }
 Package :: struct {
 	header: MessageHeader,
-	payload: string
+	payload: string,
+	socket: net.TCP_Socket
 }
 
 tx: synchan.Chan(Package, .Send)
@@ -79,7 +80,7 @@ listenBlocking :: proc(channel: synchan.Chan(Package, .Send), socket: net.TCP_So
 			"bytes"
 		)
 		
-		synchan.send(channel, Package { header, payload })
+		synchan.send(channel, Package { header, payload, socket })
 	}
 }
 
@@ -97,10 +98,12 @@ say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: string = ""
 		"bytes"
 	)
 
-	net.send_tcp(socket, headerBytes)
+	_, err := net.send_tcp(socket, headerBytes)
+	if err != nil do fmt.println("no voice (header): ", err)
 
 	if header.payloadSize > 0 {
-		net.send_tcp(socket, transmute([]u8)payload)
+		_, err2 := net.send_tcp(socket, transmute([]u8)payload)
+		if err2 != nil do fmt.println("no voice (payload): ", err2)
 	}
 }
 

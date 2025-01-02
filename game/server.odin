@@ -12,7 +12,7 @@ import "utils"
 import "networking"
 
 @(private="file")
-socket : net.TCP_Socket
+receptionSocket : net.TCP_Socket
 @(private="file")
 session : Session
 
@@ -41,12 +41,10 @@ Update :: struct {
 
 @(private="file")
 serverOrderBuffer: OrderSet
-@(private="file")
-clientSockets: [dynamic]net.TCP_Socket
 
 server :: proc() {
 	networking.init()
-	socket = networking.openServerSocket()
+	receptionSocket = networking.openServerSocket()
 
 	session = Session {
 		activePlayerIx = -1,
@@ -68,10 +66,9 @@ server :: proc() {
 startListeningForClients :: proc() {
 	waitForClients :: proc(t: ^thread.Thread) {
 		for counter := 0; ; counter += 1 {
-			clientSocket := networking.waitForClient(socket)
-			append(&clientSockets, clientSocket)
+			clientSocket := networking.waitForClient(receptionSocket)
 			fmt.printfln("new client, waiting for JOIN")
-			startClientThread(counter)
+			startClientThread(int(clientSocket))
 		}
 	}
 
@@ -86,7 +83,7 @@ startListeningForClients :: proc() {
 @(private="file")
 startClientThread :: proc(userIndex: int) {
 	clientWorker :: proc(t: ^thread.Thread) {
-		playerSocket := clientSockets[t.user_index]
+		playerSocket := transmute(net.TCP_Socket)t.user_index
 		tx := networking.tx
 		networking.listenBlocking(tx, playerSocket)
 		// listenBlocking terminates if there's a socket error
@@ -111,7 +108,7 @@ processPackage :: proc(p: networking.Package) {
 	if p.header.payloadSize > 0 do fmt.printfln("payload: %s", p.payload)
 	switch p.header.message {
 		case .JOIN:
-			if onJoin(utils.badgeToString(p.header.me), socket) do startGameIfFull()
+			if onJoin(utils.badgeToString(p.header.me), p.socket) do startGameIfFull()
 		case .UPDATE: //ignored
 		case .ORDERS:
 			if (session.players[session.activePlayerIx].id != playerName) do break
