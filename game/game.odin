@@ -168,6 +168,7 @@ getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 			cell.value.fog = .OBSERVED
 			if !known do append(&player.knownTerrain, cell.position.axial)
 		} else {
+			cell.value.walkable = false
 			if fallbackFogValue == .FOG {
 				cell.value = {
 					color = rl.GRAY,
