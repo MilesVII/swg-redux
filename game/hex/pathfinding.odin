@@ -71,7 +71,7 @@ findPath :: proc(grid: Grid(GridCell), from: Axial, to: Axial) -> (Path, bool) {
 	defer delete(gridMap)
 
 	if from == to do return nil, false
-	if (!cellIsWalkable(from, grid) || !cellIsWalkable(to, grid)) do return nil, false
+	if (!cellIsWalkable(to, grid)) do return nil, false
 
 	shockwave : [dynamic]Axial
 	gridMap[from] = {
@@ -131,31 +131,25 @@ findPath :: proc(grid: Grid(GridCell), from: Axial, to: Axial) -> (Path, bool) {
 }
 
 findWalkableOutline :: proc (grid: Grid(GridCell), from: Axial, limit: int) -> []Axial {
-	gridMap := make(map[Axial]PathNode)
+	gridMap := make(map[Axial]bool)
 	defer delete(gridMap)
 	shockwave : [dynamic]Axial
 
-	gridMap[from] = {
-		previous = from,
-		distance = 0
-	}
+	gridMap[from] = true
 	append(&shockwave, from)
 
 	for len(shockwave) > 0 {
 		current := pop(&shockwave)
-		distance := gridMap[current].distance
 
 		for nb in AXIAL_NBS {
 			tested := current + nb
+			d := distance(tested, from)
 
-			if distance + 1 >= limit do continue
+			if d >= limit do continue
 			if tested in gridMap do continue
 			if !cellIsWalkable(tested, grid) do continue
 
-			gridMap[tested] = PathNode {
-				previous = current,
-				distance = distance + 1
-			}
+			gridMap[tested] = true
 			append(&shockwave, tested)
 		}
 	}
