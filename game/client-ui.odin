@@ -116,6 +116,8 @@ clientDrawHUD :: proc() {
 		case .FREE:
 			drawOrdersControl()
 		case .ORDER_BLD:
+			drawBuildUnitsControl()
+
 			gridRadius := clientState.game.grid.radius
 			pointedIndex := hex.axialToIndex(ui.pointedCell, gridRadius)
 			buildingAllowed :=
@@ -123,24 +125,23 @@ clientDrawHUD :: proc() {
 				hex.isWithinGrid(ui.pointedCell, gridRadius) && 
 				clientState.game.grid.cells[pointedIndex].value.walkable
 
-			utils.setCursorHover(true)
-			rl.BeginMode2D(ui.camera)
-			ui.drawCellBorder(
-				ui.pointedCell,
-				.2,
-				rl.YELLOW
-			)
-			rl.EndMode2D()
-			
-			if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
-				order := Order {
-					target = ui.pointedCell,
-					targetUnitType = selectedBuildingUnit,
-					type = .BUILD
+			if buildingAllowed {
+				utils.setCursorHover(true)
+				rl.BeginMode2D(ui.camera)
+				ui.drawCellBorder(
+					ui.pointedCell,
+					.2,
+					rl.YELLOW
+				)
+				rl.EndMode2D()
+				
+				if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+					createOrder(selectedUnit.id, Order {
+						target = ui.pointedCell,
+						targetUnitType = selectedBuildingUnit,
+						type = .BUILD
+					})
 				}
-				clientState.orders[selectedUnit.id] = order
-				clientState.uiState = .FREE
-				selectedUnit = nil
 			}
 		case .ORDER_MOV:
 			rl.BeginMode2D(ui.camera)
@@ -163,13 +164,10 @@ clientDrawHUD :: proc() {
 				)
 
 				if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
-					order := Order {
+					createOrder(selectedUnit.id, Order {
 						target = ui.pointedCell,
 						type = .MOVE
-					}
-					clientState.orders[selectedUnit.id] = order
-					clientState.uiState = .FREE
-					selectedUnit = nil
+					})
 				}
 			}
 			rl.EndMode2D()
@@ -203,6 +201,7 @@ clientDrawHUD :: proc() {
 }
 
 createOrder :: proc(unitId: int, order: Order) {
+	fmt.println(unitId)
 	clientState.orders[unitId] = order
 	clientState.uiState = .FREE
 	selectedUnit = nil
@@ -270,6 +269,12 @@ drawOrdersControl :: proc() {
 	orderExists := selectedUnit.id in clientState.orders
 	row := BUTTON_ROWS[selectedUnit.type]
 	row[0].disabled = !orderExists
+
+	if selectedUnit.type == .MCV {
+		row[1].disabled = selectedUnit.gold >= 3 // DIG
+		row[3].disabled = selectedUnit.gold <= 0 // BUILD
+	}
+	
 
 	ui.buttonRow(
 		origin,

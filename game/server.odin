@@ -204,11 +204,16 @@ executeOrder :: proc(playerIx: int, unitId: int, order: Order) {
 
 	switch order.type {
 		case .BUILD: 
+			if unit.gold <= 0 do break
+			unit.gold -= 1
+
 			newUnit := GameUnit {
 				position = order.target,
-				type = order.targetUnitType
+				type = order.targetUnitType,
+				id = session.game.players[playerIx].unitIdCounter
 			}
 			append(&session.game.players[playerIx].units, newUnit)
+			session.game.players[playerIx].unitIdCounter += 1
 		case .DIG:
 			cellIx := hex.axialToIndex(order.target, session.game.grid.radius)
 			session.game.grid.cells[cellIx].value.gold -= 1
