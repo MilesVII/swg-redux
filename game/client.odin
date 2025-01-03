@@ -66,6 +66,7 @@ client :: proc(name: string) {
 	rl.InitWindow(ui.WINDOW.x, ui.WINDOW.y, "SWGRedux")
 	defer rl.CloseWindow()
 
+	rl.SetExitKey(.KEY_NULL)
 	rl.SetTargetFPS(240)
 	ui.initTextTextures()
 
