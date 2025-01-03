@@ -63,6 +63,7 @@ updateBuffer: Update
 
 client :: proc(name: string) {
 	rl.SetTraceLogLevel(.WARNING)
+	rl.SetConfigFlags({ .MSAA_4X_HINT, .WINDOW_HIGHDPI })
 	rl.InitWindow(ui.WINDOW.x, ui.WINDOW.y, "SWGRedux")
 	defer rl.CloseWindow()
 
