@@ -87,7 +87,7 @@ clientDrawWorld :: proc() {
 
 	for &player in clientState.game.players {
 		for &unit in player.units {
-			unitHovered := drawUnit(unit.position, unit.type, player.color)
+			unitHovered := drawUnit(unit.position, unit.type, unit.gold, player.color)
 			if player.color != clientState.color do continue
 
 			utils.setCursorHover(unitHovered)

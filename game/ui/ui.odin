@@ -211,6 +211,24 @@ drawTriangle :: proc(position: hex.Axial, up: bool, color: rl.Color, scale := f3
 	rl.DrawTriangle(vx[0], vx[1], vx[2], color)
 }
 
+drawGoldMarks :: proc(position: hex.Axial, gold: int) {
+	invertedBasis := hex.BASIS_Y
+	invertedBasis.y *= -1
+	origin0 := hex.axialToWorld(position) + invertedBasis * .5
+	origins := [?]rl.Vector2 {
+		origin0,
+		origin0 + rl.Vector2Rotate(rl.Vector2Normalize(invertedBasis) * .2, utils.TAU * .25),
+		origin0 + rl.Vector2Rotate(rl.Vector2Normalize(invertedBasis) * .2, utils.TAU * .75)
+	}
+	end0 := rl.Vector2Normalize(invertedBasis) * .1
+	end1 := rl.Vector2Normalize(invertedBasis) * -.1
+
+	for i in 0..<gold {
+		origin := origins[i]
+		drawLine(origin + end0, origin + end1, .1, rl.GOLD)
+	}
+}
+
 button :: proc(
 	position: rl.Vector2,
 	radius: f32,
