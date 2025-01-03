@@ -35,12 +35,15 @@ TurnMessage :: struct {
 }
 Update :: struct {
 	gameState: GameState,
-	meta: TurnMessage
+	meta: TurnMessage,
+	explosions: []hex.Axial
 }
-
 
 @(private="file")
 serverOrderBuffer: OrderSet
+
+@(private="file")
+explosionsBuffer: [dynamic]hex.Axial
 
 server :: proc() {
 	networking.init()
@@ -121,12 +124,14 @@ processPackage :: proc(p: networking.Package) {
 			for unitId in serverOrderBuffer {
 				executeOrder(session.activePlayerIx, unitId, serverOrderBuffer[unitId])
 			}
+			bonkUnits()
 
 			session.activePlayerIx += 1
 			if session.activePlayerIx >= PLAYER_COUNT {
 				session.activePlayerIx = 0
 			}
 			broadcastUpdates()
+			clear(&explosionsBuffer)
 	}
 }
 
@@ -185,17 +190,19 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	header := networking.MessageHeader {
 		message = .UPDATE,
 	}
+	reducedState := getStateForPlayer(&session.game, playerIndex)
 	update := Update {
-		gameState = getStateForPlayer(&session.game, playerIndex),
+		gameState = reducedState,
 		meta = {
 			activePlayer = session.activePlayerIx,
 			activeIsYou = playerIndex == session.activePlayerIx,
 			yourColor = session.game.players[playerIndex].color
-		}
+		},
+		explosions = reduceExplosionsToVisible(&reducedState, explosionsBuffer[:])[:]
 	}
 
-	// gameJSON := encode(game)
 	networking.say(socket, &header, encode(update))
+	deleteState(reducedState)
 }
 
 executeOrder :: proc(playerIx: int, unitId: int, order: Order) {
@@ -219,10 +226,21 @@ executeOrder :: proc(playerIx: int, unitId: int, order: Order) {
 			session.game.grid.cells[cellIx].value.gold -= 1
 			unit.gold += 1
 		case .DIREKT:
-			// todo
+			append(&explosionsBuffer, order.target)
 		case .INDIREKT:
-			// todo
+			utils.shuffle(BONK_OFFSETS[:])
+
+			for i in 0..<INDIREKT_BARRAGE_SIZE {
+				append(&explosionsBuffer, order.target + BONK_OFFSETS[i])
+			}
 		case .MOVE:
 			unit.position = order.target
+	}
+}
+
+bonkUnits :: proc() {
+	for bonk in explosionsBuffer {
+		uix, pix, found := findUnitAt(&session.game, bonk)
+		if found do unordered_remove(&session.game.players[pix].units, uix)
 	}
 }

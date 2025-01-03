@@ -35,6 +35,11 @@ Order :: struct {
 
 OrderSet :: map[int]Order
 
+Explosion :: struct {
+	at: hex.Axial,
+	fade: f32
+}
+
 ClientState :: struct {
 	game: GameState,
 	serverSocket: net.TCP_Socket,
@@ -43,7 +48,8 @@ ClientState :: struct {
 	orders: OrderSet,
 	color: rl.Color,
 	currentPlayer: int,
-	name: string
+	name: string,
+	explosions: [dynamic]Explosion
 }
 
 @(private)
@@ -100,6 +106,14 @@ clientDrawWorld :: proc() {
 			if shouldSelect do selectedUnit = &unit
 		}
 	}
+
+	for &bonk in clientState.explosions {
+		bonk.fade = ui.drawExplosion(bonk.at, bonk.fade)
+	}
+
+	for i := len(clientState.explosions) - 1; i >= 0; i -= 1 {
+		if clientState.explosions[i].fade <= 0 do unordered_remove(&clientState.explosions, i)
+	}
 }
 
 @(private="file")
@@ -143,6 +157,10 @@ processPackage :: proc(p: networking.Package) {
 			}
 			clientState.status = updateBuffer.meta.activeIsYou ? .PLAYING : .WAITING
 			if updateBuffer.meta.activeIsYou do clientState.uiState = .FREE
+
+			for bonk in updateBuffer.explosions {
+				append(&clientState.explosions, Explosion { bonk, 1 })
+			}
 		case .ORDERS: // ignored
 	}
 }

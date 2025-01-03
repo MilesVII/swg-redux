@@ -229,6 +229,16 @@ drawGoldMarks :: proc(position: hex.Axial, gold: int) {
 	}
 }
 
+EXPLOSION_ANIMATION_S := f32(1.0)
+drawExplosion :: proc(at: hex.Axial, fade: f32) -> f32 {
+	vx := hex.vertesex(at, 1.3)
+	color := rl.RED
+	color.a = u8(fade * 255)
+	rl.DrawTriangleFan(&vx[0], 6, color)
+
+	return fade - rl.GetFrameTime() / EXPLOSION_ANIMATION_S
+}
+
 button :: proc(
 	position: rl.Vector2,
 	radius: f32,

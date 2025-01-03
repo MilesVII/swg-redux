@@ -7,7 +7,7 @@ import "hex"
 import "ui"
 import "utils"
 
-MAP_RADIUS :: 16
+MAP_RADIUS :: 6
 HEIGHTS :: 11
 PLAYER_COUNT :: 2
 
@@ -30,8 +30,10 @@ colors : [HEIGHTS]rl.Color = {
 GameGrid :: hex.Grid(hex.GridCell)
 
 GameUnitType :: enum { TONK, GUN, MCV }
-VISION := [GameUnitType] int { .TONK = 3, .GUN = 1, .MCV = 5 }
-MOVING := [GameUnitType] int { .TONK = 2, .GUN = 0, .MCV = 7 }
+VISION := [GameUnitType] int { .TONK = 3, .GUN = 2, .MCV = 6 }
+MOVING := [GameUnitType] int { .TONK = 3, .GUN = 0, .MCV = 4 }
+ARANGE := [GameUnitType] int { .TONK = 5, .GUN = 10, .MCV = 0 }
+INDIREKT_BARRAGE_SIZE := 3
 
 GameUnit :: struct {
 	id: int,
@@ -60,6 +62,13 @@ PLAYER_COLORS := [?]rl.Color {
 	{0, 200, 218, 255},
 	{200, 0, 200, 255},
 	{20, 0, 220, 255}
+}
+
+BONK_OFFSETS := [?]hex.Axial {
+	{0, 0},
+	hex.AXIAL_NBS[0], hex.AXIAL_NBS[1],
+	hex.AXIAL_NBS[2], hex.AXIAL_NBS[3],
+	hex.AXIAL_NBS[4], hex.AXIAL_NBS[5]
 }
 
 findSpawnPoints :: proc(grid: GameGrid) -> [dynamic]hex.Axial {
@@ -205,6 +214,20 @@ getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 	return reducedState
 }
 
+reduceExplosionsToVisible :: proc(reducedState: ^GameState, explosions: []hex.Axial) -> [dynamic]hex.Axial {
+	redex: [dynamic]hex.Axial
+
+	for bonk in explosions {
+		cix := hex.axialToIndex(bonk, reducedState.grid.radius)
+		
+		if reducedState.grid.cells[cix].value.fog != .FOG {
+			append(&redex, bonk)
+		}
+	}
+
+	return redex
+}
+
 deleteState :: proc(state: GameState) {
 	for p in state.players {
 		delete(p.units)
@@ -258,4 +281,16 @@ findUnitById :: proc(units: []GameUnit, id: int) -> (^GameUnit, bool) {
 		if unit.id == id do return &(units[i]), true
 	}
 	return nil, false
+}
+
+findUnitAt :: proc(state: ^GameState, at: hex.Axial) -> (uix: int, pix: int, found: bool) {
+	for &player, pix in state.players {
+		for &unit, uix in player.units {
+			if unit.position == at {
+				return uix, pix, true
+			}
+		}
+	}
+
+	return 0, 0, false
 }

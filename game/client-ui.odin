@@ -197,6 +197,41 @@ clientDrawHUD :: proc() {
 				}
 			}
 		case .ORDER_ATK:
+			attackAllowed :=
+				hex.distance(selectedUnit.position, ui.pointedCell) <= ARANGE[selectedUnit.type]
+
+			if selectedUnit.type == .TONK {
+				attackAllowed &&=
+					hex.isVisible(clientState.game.grid, selectedUnit.position, ui.pointedCell)
+			}
+
+			if attackAllowed {
+				rl.BeginMode2D(ui.camera)
+				ui.drawHexLine(
+					selectedUnit.position,
+					ui.pointedCell,
+					.12, rl.RED
+				)
+
+				if selectedUnit.type == .TONK {
+					ui.drawCellBorder(
+						ui.pointedCell,
+						.2, rl.RED
+					)
+				} else {
+					area := hex.nbs(ui.pointedCell)
+					lines := hex.outline(area[:], .2)
+					ui.drawOutline(lines, rl.RED)
+				}
+				rl.EndMode2D()
+
+				if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+					createOrder(selectedUnit.id, Order {
+						target = ui.pointedCell,
+						type = selectedUnit.type == .TONK ? .DIREKT : .INDIREKT
+					})
+				}
+			}
 	}
 }
 

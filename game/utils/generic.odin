@@ -2,6 +2,7 @@ package utils
 
 import rl "vendor:raylib"
 import "core:unicode/utf8"
+import "core:math/rand"
 
 TAU :: (rl.PI * 2)
 
@@ -60,4 +61,18 @@ stringToBadge :: proc(name: string) -> Badge {
 badgeToString :: proc(badge: Badge) -> string {
 	badge := badge
 	return utf8.runes_to_string(badge[:])
+}
+
+swap :: proc(a: ^$T, b:^T) {
+	c := a^
+	a^ = b^
+	b^ = c
+}
+
+shuffle :: proc(target: []$T) {
+	for _, i in target {
+		tix := rand.int31_max(i32(len(target)))
+		if i == int(tix) do continue
+		swap(&target[i], &target[tix])
+	}
 }
