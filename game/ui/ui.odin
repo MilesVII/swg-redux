@@ -80,9 +80,10 @@ updateIO :: proc() {
 	dt := rl.GetFrameTime()
 	pointer = rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
 
-	if rl.IsKeyDown(.E) do camera.zoom += 0.1
-	if rl.IsKeyDown(.Q) do camera.zoom -= 0.1
-	if camera.zoom < .1 do camera.zoom = .1
+	if rl.IsKeyDown(.E) do camera.zoom += 0.2
+	if rl.IsKeyDown(.Q) do camera.zoom -= 0.2
+	camera.zoom -= rl.GetMouseWheelMove()
+	camera.zoom = rl.Clamp(camera.zoom, 5, 100)
 
 	cameraDelta := rl.Vector2 {0, 0}
 	if rl.IsMouseButtonDown(.LEFT) {
