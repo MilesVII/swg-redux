@@ -378,7 +378,7 @@ drawTurnControl :: proc() {
 				selectedUnit = nil
 				clientState.uiState = .FREE
 			},
-			.ENTER
+			.ESCAPE
 		)
 	}
 }
