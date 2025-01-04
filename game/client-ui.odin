@@ -297,8 +297,8 @@ drawOrders :: proc(orders: map[int]Order) {
 drawOrdersControl :: proc() {
 	buttonSize := f32(32.0)
 	origin := rl.Vector2 {
-		f32(ui.WINDOW[0]) * .5,
-		f32(ui.WINDOW[1]) - buttonSize * 1.5
+		f32(ui.windowSize.x) * .5,
+		f32(ui.windowSize.y) - buttonSize * 1.5
 	}
 
 	orderExists := selectedUnit.id in clientState.orders
@@ -327,8 +327,8 @@ drawOrdersControl :: proc() {
 drawBuildUnitsControl :: proc() {
 	buttonSize := f32(32.0)
 	origin := rl.Vector2 {
-		f32(ui.WINDOW[0]) * .5,
-		f32(ui.WINDOW[1]) - buttonSize * 1.5
+		f32(ui.windowSize.x) * .5,
+		f32(ui.windowSize.y) - buttonSize * 1.5
 	}
 
 	for &button, index in BUTTON_ROW_BLD {
@@ -350,7 +350,7 @@ drawBuildUnitsControl :: proc() {
 drawTurnControl :: proc() {
 	buttonSize := f32(32.0)
 	orgn := rl.Vector2 {
-		f32(ui.WINDOW[0]) - buttonSize * 2.5,
+		f32(ui.windowSize.x) - buttonSize * 2.5,
 		buttonSize * 1.5
 	}
 

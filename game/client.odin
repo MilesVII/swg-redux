@@ -63,8 +63,8 @@ updateBuffer: Update
 
 client :: proc(name: string) {
 	rl.SetTraceLogLevel(.WARNING)
-	rl.SetConfigFlags({ .MSAA_4X_HINT, .WINDOW_HIGHDPI })
-	rl.InitWindow(ui.WINDOW.x, ui.WINDOW.y, "SWGRedux")
+	rl.SetConfigFlags({ .MSAA_4X_HINT, .WINDOW_HIGHDPI, .WINDOW_RESIZABLE })
+	rl.InitWindow(ui.windowSize.x, ui.windowSize.y, "SWGRedux")
 	defer rl.CloseWindow()
 
 	rl.SetExitKey(.KEY_NULL)
@@ -76,6 +76,7 @@ client :: proc(name: string) {
 	connect()
 
 	for !rl.WindowShouldClose() {
+		fmt.println(rl.GetScreenWidth())
 		for synchan.can_recv(networking.rx) {
 			data, ok := synchan.recv(networking.rx)
 			processPackage(data)

@@ -7,10 +7,10 @@ import "core:fmt"
 import "core:strings"
 import "core:math"
 
-WINDOW :: [2]i32 {640, 480}
+windowSize := [2]i32 { 640, 480 }
 
 camera := rl.Camera2D {
-	offset = rl.Vector2 {f32(WINDOW.x) / 2, f32(WINDOW.y) / 2},
+	offset = rl.Vector2 {f32(windowSize.x) / 2, f32(windowSize.y) / 2},
 	target = rl.Vector2 {0, 0},
 	rotation = 0.0,
 	zoom = 30.0,
@@ -77,6 +77,10 @@ initTextTextures :: proc() {
 }
 
 updateIO :: proc() {
+	if rl.IsWindowResized() {
+		windowSize.x = rl.GetScreenWidth()
+		windowSize.y = rl.GetScreenHeight()
+	}
 	dt := rl.GetFrameTime()
 	pointer = rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
 
@@ -306,7 +310,7 @@ buttonRow :: proc(
 	width := xStep * f32(buttonCount - 1)
 	xStart := origin.x - width * .5
 
-	y := f32(WINDOW[1]) - radius * 1.5
+	y := f32(windowSize.y) - radius * 1.5
 
 	for butt, i in buttons {
 		hovered := button(

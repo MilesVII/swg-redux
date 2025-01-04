@@ -11,7 +11,7 @@ import "ui"
 debugGrid : GameGrid
 
 debug :: proc() {
-	rl.InitWindow(ui.WINDOW.x, ui.WINDOW.y, "SWGRedux Debug")
+	rl.InitWindow(ui.windowSize.x, ui.windowSize.y, "SWGRedux Debug")
 	defer rl.CloseWindow()
 
 	rl.SetTargetFPS(240)
