@@ -32,17 +32,26 @@ some :: proc(array: ^[dynamic]$T, cb: proc(^T) -> bool) -> bool {
 
 @(private)
 cursorHover := false
-
 cursorHoverBegin :: proc() {
 	cursorHover = false
 }
-
 setCursorHover :: proc(hover: bool) {
 	if hover do cursorHover = true
 }
-
 cursorHoverEnd :: proc() {
 	rl.SetMouseCursor(cursorHover ? .POINTING_HAND : .DEFAULT)
+}
+
+@(private)
+clicked := false
+feedClick :: proc() {
+	clicked = rl.IsMouseButtonPressed(.LEFT)
+}
+// Should be checked last
+isClicked :: proc() -> bool {
+	stored := clicked
+	clicked = false
+	return stored
 }
 
 BadgeSize :: 16

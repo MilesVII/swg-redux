@@ -6,6 +6,7 @@ import "core:fmt"
 
 import "hex"
 import "ui"
+import "utils"
 
 @(private="file")
 debugGrid : GameGrid
@@ -24,7 +25,7 @@ debug :: proc() {
 	for !rl.WindowShouldClose() {
 		ui.updateIO()
 		ui.draw(debugDrawWorld, debugDrawHUD)
-		if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+		if utils.isClicked() {
 			state.players[0].units[0].position = ui.pointedCell
 			deleteState(reducedState)
 			reducedState = getStateForPlayer(&state, 0)

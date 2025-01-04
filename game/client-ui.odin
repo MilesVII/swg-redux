@@ -135,7 +135,7 @@ clientDrawHUD :: proc() {
 				)
 				rl.EndMode2D()
 				
-				if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+				if utils.isClicked() {
 					createOrder(selectedUnit.id, Order {
 						target = ui.pointedCell,
 						targetUnitType = selectedBuildingUnit,
@@ -163,7 +163,7 @@ clientDrawHUD :: proc() {
 					rl.BLUE
 				)
 
-				if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+				if utils.isClicked() {
 					createOrder(selectedUnit.id, Order {
 						target = ui.pointedCell,
 						type = .MOVE
@@ -189,7 +189,7 @@ clientDrawHUD :: proc() {
 				)
 				rl.EndMode2D()
 				
-				if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+				if utils.isClicked() {
 					createOrder(selectedUnit.id, Order {
 						target = ui.pointedCell,
 						type = .DIG
@@ -225,7 +225,7 @@ clientDrawHUD :: proc() {
 				}
 				rl.EndMode2D()
 
-				if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+				if utils.isClicked() {
 					createOrder(selectedUnit.id, Order {
 						target = ui.pointedCell,
 						type = selectedUnit.type == .TONK ? .DIREKT : .INDIREKT

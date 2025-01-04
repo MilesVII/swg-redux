@@ -76,7 +76,6 @@ client :: proc(name: string) {
 	connect()
 
 	for !rl.WindowShouldClose() {
-		fmt.println(rl.GetScreenWidth())
 		for synchan.can_recv(networking.rx) {
 			data, ok := synchan.recv(networking.rx)
 			processPackage(data)
@@ -104,7 +103,7 @@ clientDrawWorld :: proc() {
 			shouldSelect :=
 				unitHovered &&
 				clientState.uiState == .FREE &&
-				rl.IsMouseButtonDown(rl.MouseButton.LEFT)
+				utils.isClicked()
 			
 			if shouldSelect do selectedUnit = &unit
 		}

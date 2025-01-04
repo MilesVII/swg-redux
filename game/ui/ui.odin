@@ -77,6 +77,8 @@ initTextTextures :: proc() {
 }
 
 updateIO :: proc() {
+	utils.feedClick()
+
 	if rl.IsWindowResized() {
 		windowSize.x = rl.GetScreenWidth()
 		windowSize.y = rl.GetScreenHeight()
@@ -277,7 +279,7 @@ button :: proc(
 	)
 
 	if hovered && !disabled {
-		if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) do action()
+		if utils.isClicked() do action()
 
 		return true
 	}
