@@ -141,7 +141,6 @@ onJoin :: proc(player: string, socket: net.TCP_Socket) -> bool {
 	for &p, index in session.players {
 		id, exists := p.id.?
 		if exists && id == player {
-			// TODO
 			// welcome back
 			p.socket = socket
 			p.online = true

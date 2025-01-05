@@ -9,12 +9,12 @@ fade :: proc(t: f32) -> f32 {
 	return t * t * t * (t * (t * 6 - 15) + 10) - (t > .5 ? 0 : .017)
 }
 
-noise :: proc(at: rl.Vector2, zoom: f32) -> f32 {
+noise :: proc(at: rl.Vector2, zoom: f32, seed := i64(0)) -> f32 {
 	penis := [2]f64 {
 		f64(at.x * zoom),
 		f64(at.y * zoom)
 	}
-	return (simplex.noise_2d(0, penis) + 1) / 2
+	return (simplex.noise_2d(seed, penis) + 1) / 2
 }
 
 Octave :: struct {
@@ -22,7 +22,7 @@ Octave :: struct {
 	factor: f32
 }
 
-height :: proc(at: rl.Vector2, levels: int) -> int {
+height :: proc(at: rl.Vector2, levels: int, seed := i64(0)) -> int {
 	octaves := [?]Octave{
 		{.1, .5},
 		{.3, .3},
@@ -30,7 +30,7 @@ height :: proc(at: rl.Vector2, levels: int) -> int {
 	}
 	n: f32 = 0
 	for octave in octaves {
-		n += noise(at, octave.zoom) * octave.factor
+		n += noise(at, octave.zoom, seed) * octave.factor
 	}
 	n = fade(n)
 	level := int(math.round(n * f32(levels - 1)))

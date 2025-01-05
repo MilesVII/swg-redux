@@ -107,13 +107,13 @@ findSpawnPoints :: proc(grid: GameGrid) -> [dynamic]hex.Axial {
 	return spawns
 }
 
-createGame :: proc() -> GameState {
+createGame :: proc(seed := i64(0)) -> GameState {
 	state := GameState {
 		grid = hex.grid(MAP_RADIUS, hex.GridCell)
 	}
 
 	for &cell in state.grid.cells {
-		hi := hex.height(cell.position.world, HEIGHTS)
+		hi := hex.height(cell.position.world, HEIGHTS, seed)
 		color := colors[hi]
 		goldCell := color == rl.YELLOW
 
