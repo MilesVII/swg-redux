@@ -25,7 +25,8 @@ Player :: struct {
 Session :: struct {
 	activePlayerIx: int,
 	players: []Player,
-	game: GameState
+	game: GameState,
+	over: bool
 }
 
 TurnMessage :: struct {
@@ -131,10 +132,14 @@ processPackage :: proc(p: networking.Package) {
 			}
 			bonkUnits()
 
-			session.activePlayerIx += 1
-			if session.activePlayerIx >= len(session.players) {
-				session.activePlayerIx = 0
+			session.over = gameOver()
+
+			if !session.over do for {
+				nextPlayer()
+				playerUnits := session.game.players[session.activePlayerIx].units
+				if len(playerUnits) > 0 do break
 			}
+
 			broadcastUpdates()
 			clear(&explosionsBuffer)
 	}
@@ -194,7 +199,7 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	header := networking.MessageHeader {
 		message = .UPDATE,
 	}
-	reducedState := getStateForPlayer(&session.game, playerIndex)
+	reducedState := session.over ? session.game : getStateForPlayer(&session.game, playerIndex)
 	update := Update {
 		gameState = reducedState,
 		meta = {
@@ -206,7 +211,7 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	}
 
 	networking.say(socket, &header, encode(update))
-	deleteState(reducedState)
+	if !session.over do deleteState(reducedState)
 }
 
 executeOrder :: proc(playerIx: int, unitId: int, order: Order) {
@@ -246,5 +251,21 @@ bonkUnits :: proc() {
 	for bonk in explosionsBuffer {
 		uix, pix, found := findUnitAt(&session.game, bonk)
 		if found do unordered_remove(&session.game.players[pix].units, uix)
+	}
+}
+
+gameOver :: proc() -> bool {
+	ablePlayers := 0
+	for player in session.game.players {
+		if len(player.units) > 0 do ablePlayers += 1
+	}
+
+	return ablePlayers <= 1
+}
+
+nextPlayer :: proc() {
+	session.activePlayerIx += 1
+	if session.activePlayerIx >= len(session.players) {
+		session.activePlayerIx = 0
 	}
 }
