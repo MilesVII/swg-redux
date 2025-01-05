@@ -64,10 +64,10 @@ config :: proc() -> Config {
 
 		clientTable, clientTableFound := toml.get_table(section, "client")
 		if clientTableFound {
-			name, nameFound := toml.get(string, section, "name")
+			name, nameFound := toml.get(string, clientTable, "name")
 			if nameFound do config.client.name = name
 
-			addressString, addressFound := toml.get(string, section, "server")
+			addressString, addressFound := toml.get(string, clientTable, "server")
 			if addressFound {
 				address, ok := net.aton(addressString, .IP4)
 				if ok {
@@ -80,13 +80,13 @@ config :: proc() -> Config {
 
 		serverTable, serverTableFound := toml.get_table(section, "server")
 		if serverTableFound {
-			players, playersFound := toml.get(i64, section, "players")
+			players, playersFound := toml.get(i64, serverTable, "players")
 			if playersFound do config.server.players = int(players)
 			
-			radius, radiusFound := toml.get(i64, section, "radius")
+			radius, radiusFound := toml.get(i64, serverTable, "radius")
 			if radiusFound do config.server.radius = int(radius)
 			
-			seed, seedFound := toml.get(i64, section, "seed")
+			seed, seedFound := toml.get(i64, serverTable, "seed")
 			if seedFound do config.server.seed = seed
 		}
 	}
