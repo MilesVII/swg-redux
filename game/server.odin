@@ -24,7 +24,7 @@ Player :: struct {
 
 Session :: struct {
 	activePlayerIx: int,
-	players: [PLAYER_COUNT]Player,
+	players: []Player,
 	game: GameState
 }
 
@@ -45,15 +45,20 @@ serverOrderBuffer: OrderSet
 @(private="file")
 explosionsBuffer: [dynamic]hex.Axial
 
-server :: proc() {
-	networking.init()
-	receptionSocket = networking.openServerSocket()
-
+server :: proc(playerCount: int, mapRadius: int, mapSeed: i64, local: bool, port: int) {
 	session = Session {
 		activePlayerIx = -1,
+		players = make([]Player, playerCount)
 	}
+
+	networking.init()
+	receptionSocket = networking.openServerSocket(
+		local ? net.IP4_Loopback : net.IP4_Address { 0, 0, 0, 0 },
+		port
+	)
+
 	for &player in session.players do player.online = false
-	session.game = createGame()
+	session.game = createGame(playerCount, mapRadius)
 	
 	startListeningForClients()
 
@@ -127,7 +132,7 @@ processPackage :: proc(p: networking.Package) {
 			bonkUnits()
 
 			session.activePlayerIx += 1
-			if session.activePlayerIx >= PLAYER_COUNT {
+			if session.activePlayerIx >= len(session.players) {
 				session.activePlayerIx = 0
 			}
 			broadcastUpdates()

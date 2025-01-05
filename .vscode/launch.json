@@ -18,15 +18,6 @@
 			"program": "${workspaceFolder}/build/debug.exe",
 			"args": ["--mode", "server"],
 			"cwd": "${workspaceFolder}"
-		},
-		{
-			"type": "cppvsdbg",
-			"request": "launch",
-			"preLaunchTask": "Build",
-			"name": "Debug",
-			"program": "${workspaceFolder}/build/debug.exe",
-			"args": ["--mode", "debug"],
-			"cwd": "${workspaceFolder}"
 		}
 	]
 }

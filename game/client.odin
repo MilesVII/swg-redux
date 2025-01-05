@@ -61,7 +61,7 @@ clientState := ClientState {
 @(private="file")
 updateBuffer: Update
 
-client :: proc(name: string) {
+client :: proc(to: net.Address, port: int, name: string) {
 	rl.SetTraceLogLevel(.WARNING)
 	rl.SetConfigFlags({ .MSAA_4X_HINT, .WINDOW_HIGHDPI, .WINDOW_RESIZABLE })
 	rl.InitWindow(ui.windowSize.x, ui.windowSize.y, "SWGRedux")
@@ -73,7 +73,7 @@ client :: proc(name: string) {
 
 	networking.init()
 	clientState.name = name
-	connect()
+	connect(to, port)
 
 	for !rl.WindowShouldClose() {
 		for synchan.can_recv(networking.rx) {
@@ -119,8 +119,8 @@ clientDrawWorld :: proc() {
 }
 
 @(private="file")
-connect :: proc() {
-	clientState.serverSocket = networking.dial()
+connect :: proc(to: net.Address, port: int) {
+	clientState.serverSocket = networking.dial(to, port)
 	startListening()
 
 	header := networking.MessageHeader {

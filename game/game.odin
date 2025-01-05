@@ -7,9 +7,7 @@ import "hex"
 import "ui"
 import "utils"
 
-MAP_RADIUS :: 6
 HEIGHTS :: 11
-PLAYER_COUNT :: 2
 
 MOUNTAIN_COLOR := rl.Color{154, 66, 66, 255}
 
@@ -51,7 +49,7 @@ PlayerState :: struct {
 }
 
 GameState :: struct {
-	players: [PLAYER_COUNT]PlayerState,
+	players: []PlayerState,
 	grid: GameGrid
 }
 
@@ -107,9 +105,10 @@ findSpawnPoints :: proc(grid: GameGrid) -> [dynamic]hex.Axial {
 	return spawns
 }
 
-createGame :: proc(seed := i64(0)) -> GameState {
+createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> GameState {
 	state := GameState {
-		grid = hex.grid(MAP_RADIUS, hex.GridCell)
+		grid = hex.grid(mapRadius, hex.GridCell),
+		players = make([]PlayerState, playerCount)
 	}
 
 	for &cell in state.grid.cells {
@@ -127,9 +126,9 @@ createGame :: proc(seed := i64(0)) -> GameState {
 	}
 	hex.markWalkableAreas(state.grid)
 
-	assert(PLAYER_COUNT <= 6, "can't find more than six spawn points")
+	assert(playerCount <= 6, "can't find more than six spawn points")
 	spawnPoints := findSpawnPoints(state.grid)
-	assert(len(spawnPoints) >= PLAYER_COUNT, "can't find enough spawn points for this seed, please restart")
+	assert(len(spawnPoints) >= playerCount, "can't find enough spawn points for this seed, please restart")
 
 	for &player, i in state.players {
 		units := []GameUnit {
@@ -229,6 +228,7 @@ reduceExplosionsToVisible :: proc(reducedState: ^GameState, explosions: []hex.Ax
 }
 
 deleteState :: proc(state: GameState) {
+	delete(state.players)
 	for p in state.players {
 		delete(p.units)
 		delete(p.knownTerrain)
@@ -238,6 +238,8 @@ deleteState :: proc(state: GameState) {
 
 cloneState :: proc(state: GameState) -> GameState {
 	newState := state
+	newState.players = slice.clone(state.players)
+
 	for &p, i in newState.players {
 		p.units = slice.clone_to_dynamic(p.units[:])
 		p.knownTerrain = slice.clone_to_dynamic(p.knownTerrain[:])

@@ -105,7 +105,22 @@ config :: proc() -> Config {
 main :: proc () {
 	config := config()
 	switch config.common.mode {
-		case .Client: game.client(config.client.name)
-		case .Server: game.server()
+		case .Client: 
+			server: net.Address
+			if config.common.local do server = net.IP4_Loopback
+			else do server = config.client.server
+
+			game.client(
+				server,
+				config.common.port,
+				config.client.name
+			)
+		case .Server: game.server(
+			config.server.players,
+			config.server.radius,
+			config.server.seed,
+			config.common.local,
+			config.common.port
+		)
 	}
 }

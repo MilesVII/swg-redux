@@ -9,8 +9,6 @@ import "core:fmt"
 import "core:strings"
 import synchan "core:sync/chan"
 
-PORT :: 7420
-
 Message :: enum { JOIN, UPDATE, ORDERS }
 MessageHeader :: struct {
 	message: Message,
@@ -36,10 +34,10 @@ init :: proc() {
 	rx = synchan.as_recv(channel)
 }
 
-openServerSocket :: proc() -> net.TCP_Socket {
+openServerSocket :: proc(address: net.Address, port: int) -> net.TCP_Socket {
 	socket, err := net.listen_tcp(net.Endpoint{
-		port = PORT,
-		address = net.IP4_Loopback
+		port = port,
+		address = address
 	})
 	if err != nil {
 		fmt.panicf("listen error : %s", err)
@@ -48,11 +46,11 @@ openServerSocket :: proc() -> net.TCP_Socket {
 	return socket
 }
 
-dial :: proc() -> net.TCP_Socket {
-	socket, err := net.dial_tcp(net.IP4_Loopback, PORT)
+dial :: proc(to: net.Address, port: int) -> net.TCP_Socket {
+	socket, err := net.dial_tcp(to, port)
 
 	if err != nil {
-		fmt.panicf("can't dial localhost:%s; %s", PORT, err)
+		fmt.panicf("can't dial localhost:%s; %s", port, err)
 	}
 
 	return socket
