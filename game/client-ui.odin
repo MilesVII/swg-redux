@@ -106,10 +106,12 @@ clientDrawHUD :: proc() {
 	drawOrders(clientState.orders)
 	rl.EndMode2D()
 
+	if selectedUnit != nil do drawOrdersPreview()
+
 	drawTurnControl()
+}
 
-	if selectedUnit == nil do return
-
+drawOrdersPreview :: proc() {
 	switch clientState.uiState {
 		case .DISABLED:
 		case .FREE:

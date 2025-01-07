@@ -103,6 +103,7 @@ clientDrawWorld :: proc() {
 			shouldSelect :=
 				unitHovered &&
 				clientState.uiState == .FREE &&
+				(selectedUnit == nil || selectedUnit.id != unit.id) &&
 				utils.isClicked()
 			
 			if shouldSelect do selectedUnit = &unit
