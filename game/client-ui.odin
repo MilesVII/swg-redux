@@ -87,7 +87,6 @@ BUTTON_ROW_BLD := [?]ui.Button {
 
 @(private)
 clientDrawHUD :: proc() {
-	// fmt.ctprint(ui.pointedCell)
 	switch clientState.status {
 		case .CONNECTING: rl.DrawText("Connecting to server", 4, 4, 10, rl.BLACK)
 		case .LOBBY:      rl.DrawText("Waiting for players to join", 4, 4, 10, rl.BLACK)
@@ -123,7 +122,8 @@ clientDrawHUD :: proc() {
 			buildingAllowed :=
 				hex.distance(selectedUnit.position, ui.pointedCell) == 1 && 
 				hex.isWithinGrid(ui.pointedCell, gridRadius) && 
-				clientState.game.grid.cells[pointedIndex].value.walkable
+				clientState.game.grid.cells[pointedIndex].value.walkable &&
+				noOrdersAt(ui.pointedCell, clientState.orders)
 
 			if buildingAllowed {
 				utils.setCursorHover(true)
@@ -151,7 +151,10 @@ clientDrawHUD :: proc() {
 				MOVING[selectedUnit.type]
 			)
 			ui.drawOutline(hex.outline(allowedCells), rl.BLACK)
-			movingAllowed := ui.pointedCell != selectedUnit.position && utils.includes(allowedCells, &ui.pointedCell)
+			movingAllowed :=
+				ui.pointedCell != selectedUnit.position &&
+				utils.includes(allowedCells, &ui.pointedCell) &&
+				noOrdersAt(ui.pointedCell, clientState.orders)
 			
 			if movingAllowed {
 				utils.setCursorHover(true)
@@ -177,7 +180,8 @@ clientDrawHUD :: proc() {
 			diggingAllowed :=
 				hex.distance(selectedUnit.position, ui.pointedCell) == 1 && 
 				hex.isWithinGrid(ui.pointedCell, gridRadius) && 
-				clientState.game.grid.cells[pointedIndex].value.gold > 0
+				clientState.game.grid.cells[pointedIndex].value.gold > 0 &&
+				noOrdersAt(ui.pointedCell, clientState.orders)
 
 			if diggingAllowed {
 				utils.setCursorHover(true)
@@ -242,7 +246,7 @@ createOrder :: proc(unitId: int, order: Order) {
 	selectedUnit = nil
 }
 
-drawOrders :: proc(orders: map[int]Order) {
+drawOrders :: proc(orders: OrderSet) {
 	for unitId, order in orders {
 		if selectedUnit != nil && selectedUnit.id == unitId && clientState.uiState != .FREE do continue
 		unit, ok := findUnitById(clientState.game.players[clientState.currentPlayer].units[:], unitId)
@@ -381,4 +385,14 @@ drawTurnControl :: proc() {
 			.ESCAPE
 		)
 	}
+}
+
+noOrdersAt :: proc(at: hex.Axial, orders: OrderSet) -> bool {
+	for _, order in orders {
+		if order.type == .DIREKT || order.type == .INDIREKT do continue
+
+		if order.target == at do return false
+	}
+
+	return true
 }
