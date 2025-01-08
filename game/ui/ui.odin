@@ -199,15 +199,30 @@ drawLine :: proc(from: rl.Vector2, to: rl.Vector2, thickness: f32, color: rl.Col
 
 drawPath :: proc(path: hex.Path, thickness := f32(.4), color: rl.Color = rl.BLACK) {
 	for node, index in path {
-		if index != len(path) - 1 && index != 0 {
-			rl.DrawCircleV(hex.axialToWorld(node), thickness * .5, color)
-			f := hex.axialToWorld(node)
-			t := hex.axialToWorld(path[index + 1])
-			drawLine(f, t, thickness, color)
+		if index != len(path) - 1 {
+			f, t: rl.Vector2
+			isFirst := index == 0
+			isLast := index == len(path) - 2
 
-			if index + 1 == len(path) - 1 {
-				rl.DrawCircleV(hex.axialToWorld(path[index + 1]), thickness * .5, color)
+			switch {
+				case isFirst:
+					f = hex.axialToWorld(node)
+					t = hex.axialToWorld(path[index + 1])
+					half := (t - f) * .5
+					f += half
+				case isLast:
+					f = hex.axialToWorld(node)
+					t = hex.axialToWorld(path[index + 1])
+					half := (f - t) * .5
+					t += half
+				case:
+					f = hex.axialToWorld(node)
+					t = hex.axialToWorld(path[index + 1])
 			}
+
+			rl.DrawCircleV(f, thickness * .5, color)
+			if isLast do rl.DrawCircleV(t, thickness * .5, color)
+			drawLine(f, t, thickness, color)
 		}
 	}
 }

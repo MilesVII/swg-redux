@@ -161,7 +161,7 @@ drawOrdersPreview :: proc() {
 			if movingAllowed {
 				utils.setCursorHover(true)
 				path, _found := hex.findPath(clientState.game.grid, selectedUnit.position, ui.pointedCell)
-				ui.drawPath(path, .12, rl.BLUE)
+				if len(path) > 2 do ui.drawPath(path, .12, rl.BLUE)
 				ui.drawCellBorder(
 					ui.pointedCell,
 					.2,

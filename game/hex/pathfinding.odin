@@ -123,6 +123,7 @@ findPath :: proc(grid: Grid(GridCell), from: Axial, to: Axial) -> (Path, bool) {
 			append(&result, head)
 			head = gridMap[head].previous
 		}
+		append(&result, from)
 
 		return result[:], true
 	}
