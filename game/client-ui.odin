@@ -286,11 +286,7 @@ drawOrders :: proc(orders: OrderSet) {
 				ui.drawOutline(lines, rl.RED)
 			case .MOVE:
 				path, _found := hex.findPath(clientState.game.grid, unit.position, order.target)
-				ui.drawPath(path, .12, rl.BLUE)
-				ui.drawCellBorder(
-					order.target,
-					.2, rl.BLUE
-				)
+				if len(path) > 2 do ui.drawPath(path, .12, rl.BLUE)
 				ui.drawCellBorder(
 					order.target,
 					.2, rl.BLUE
