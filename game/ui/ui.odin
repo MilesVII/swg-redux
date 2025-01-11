@@ -233,17 +233,13 @@ drawPath :: proc(path: hex.Path, thickness := f32(.4), color: rl.Color = rl.BLAC
 					t = hex.axialToWorld(path[index + 1])
 			}
 
-			if striped == nil {
-				rl.DrawCircleV(f, thickness * .5, color)
-				if isLast do rl.DrawCircleV(t, thickness * .5, color)
-			}
+			      if striped != nil do rl.BeginShaderMode(striped.shader)
+			defer if striped != nil do rl.EndShaderMode()
 
-			if striped == nil do drawLine(f, t, thickness, color, striped)
-			else {
-				rl.BeginShaderMode(striped.shader)
-				drawLine(f, t, thickness, color, striped)
-				rl.EndShaderMode()
-			}
+			rl.DrawCircleV(f, thickness * .5, color)
+			if isLast do rl.DrawCircleV(t, thickness * .5, color)
+
+			drawLine(f, t, thickness, color, striped)
 		}
 	}
 }
