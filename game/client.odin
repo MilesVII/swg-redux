@@ -14,6 +14,7 @@ import "hex"
 import "ui"
 import "utils"
 import "networking"
+import "shaded"
 
 ClientStatus :: enum {
 	CONNECTING, LOBBY, WAITING, PLAYING, FINISH
@@ -61,6 +62,8 @@ clientState := ClientState {
 @(private="file")
 updateBuffer: Update
 
+stripeShader: shaded.StripedShader
+
 client :: proc(to: net.Address, port: int, name: string) {
 	rl.SetTraceLogLevel(.WARNING)
 	rl.SetConfigFlags({ .MSAA_4X_HINT, .WINDOW_HIGHDPI, .WINDOW_RESIZABLE })
@@ -74,6 +77,8 @@ client :: proc(to: net.Address, port: int, name: string) {
 	networking.init()
 	clientState.name = name
 	connect(to, port)
+
+	stripeShader = shaded.createStripedShader()
 
 	for !rl.WindowShouldClose() {
 		for synchan.can_recv(networking.rx) {

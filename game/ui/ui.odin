@@ -1,11 +1,14 @@
 package ui
 
 import rl "vendor:raylib"
-import "../hex"
-import "../utils"
+
 import "core:fmt"
 import "core:strings"
 import "core:math"
+
+import "../hex"
+import "../utils"
+import "../shaded"
 
 windowSize := [2]i32 { 640, 480 }
 
@@ -30,6 +33,9 @@ UI_TEXT_MCV: rl.Texture2D
 
 UI_TEXT_SUB: rl.Texture2D
 UI_TEXT_ABT: rl.Texture2D
+
+DOTTED_FLICKER_S :: 1.0
+DOTTED_WIDTH :: 8.0
 
 initTextTextures :: proc() {
 	font := rl.GetFontDefault() // rl.LoadFont("./assets/JetBrainsMono-Regular.ttf")
@@ -182,7 +188,7 @@ drawHexLine :: proc(from: hex.Axial, to: hex.Axial, thickness: f32, color: rl.Co
 	drawLine(f, t, thickness, color)
 }
 
-drawLine :: proc(from: rl.Vector2, to: rl.Vector2, thickness: f32, color: rl.Color = rl.BLACK) {
+drawLine :: proc(from: rl.Vector2, to: rl.Vector2, thickness: f32, color: rl.Color = rl.BLACK, striped: ^shaded.StripedShader = nil) {
 	ray := to - from
 	offv := rl.Vector2Normalize(ray) * thickness * .5
 	ninety : f32 = -utils.TAU * .25
@@ -194,10 +200,17 @@ drawLine :: proc(from: rl.Vector2, to: rl.Vector2, thickness: f32, color: rl.Col
 		from + rl.Vector2Rotate(offv, ninety),
 	}
 	
+	if (striped != nil) {
+		striped.state.period = DOTTED_FLICKER_S
+		striped.state.width = DOTTED_WIDTH * camera.zoom * .1
+		striped.state.direction = rl.Vector2Normalize(to - from) * { 1, -1 } // thanks for uniform y direction raysan
+		shaded.updateStripedShader(striped^)
+	}
+
 	rl.DrawTriangleFan(&vx[0], 4, color)
 }
 
-drawPath :: proc(path: hex.Path, thickness := f32(.4), color: rl.Color = rl.BLACK) {
+drawPath :: proc(path: hex.Path, thickness := f32(.4), color: rl.Color = rl.BLACK, striped: ^shaded.StripedShader = nil) {
 	for node, index in path {
 		if index != len(path) - 1 {
 			f, t: rl.Vector2
@@ -220,9 +233,17 @@ drawPath :: proc(path: hex.Path, thickness := f32(.4), color: rl.Color = rl.BLAC
 					t = hex.axialToWorld(path[index + 1])
 			}
 
-			rl.DrawCircleV(f, thickness * .5, color)
-			if isLast do rl.DrawCircleV(t, thickness * .5, color)
-			drawLine(f, t, thickness, color)
+			if striped == nil {
+				rl.DrawCircleV(f, thickness * .5, color)
+				if isLast do rl.DrawCircleV(t, thickness * .5, color)
+			}
+
+			if striped == nil do drawLine(f, t, thickness, color, striped)
+			else {
+				rl.BeginShaderMode(striped.shader)
+				drawLine(f, t, thickness, color, striped)
+				rl.EndShaderMode()
+			}
 		}
 	}
 }
@@ -269,7 +290,8 @@ button :: proc(
 	action: proc(),
 	hotkey: rl.KeyboardKey,
 	disabled := false,
-	disabledColor := rl.LIGHTGRAY
+	disabledColor := rl.LIGHTGRAY,
+
 ) -> bool {
 	vxOuter := hex.vertesexRaw(position, radius)
 	vxInner := hex.vertesexRaw(position, radius * .8)

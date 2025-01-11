@@ -8,6 +8,7 @@ import "core:fmt"
 import "ui"
 import "utils"
 import "hex"
+import "shaded"
 
 @(private)
 selectedUnit : ^GameUnit = nil
@@ -161,7 +162,7 @@ drawOrdersPreview :: proc() {
 			if movingAllowed {
 				utils.setCursorHover(true)
 				path, _found := hex.findPath(clientState.game.grid, selectedUnit.position, ui.pointedCell)
-				if len(path) > 2 do ui.drawPath(path, .12, rl.BLUE)
+				if len(path) > 2 do ui.drawPath(path, .12, rl.BLUE, &stripeShader)
 				ui.drawCellBorder(
 					ui.pointedCell,
 					.2,
@@ -286,7 +287,7 @@ drawOrders :: proc(orders: OrderSet) {
 				ui.drawOutline(lines, rl.RED)
 			case .MOVE:
 				path, _found := hex.findPath(clientState.game.grid, unit.position, order.target)
-				if len(path) > 2 do ui.drawPath(path, .12, rl.BLUE)
+				if len(path) > 2 do ui.drawPath(path, .12, rl.BLUE, &stripeShader)
 				ui.drawCellBorder(
 					order.target,
 					.2, rl.BLUE
