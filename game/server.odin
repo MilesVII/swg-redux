@@ -136,8 +136,7 @@ processPackage :: proc(p: networking.Package) {
 
 			if !session.over do for {
 				nextPlayer()
-				playerUnits := session.game.players[session.activePlayerIx].units
-				if len(playerUnits) > 0 do break
+				if activeUnitsLeft(session.activePlayerIx) do break
 			}
 
 			broadcastUpdates()
@@ -256,11 +255,18 @@ bonkUnits :: proc() {
 
 gameOver :: proc() -> bool {
 	ablePlayers := 0
-	for player in session.game.players {
-		if len(player.units) > 0 do ablePlayers += 1
+	for player, pix in session.game.players {
+		if activeUnitsLeft(pix) do ablePlayers += 1
 	}
 
 	return ablePlayers <= 1
+}
+
+activeUnitsLeft :: proc(playerIx: int) -> bool {
+	for unit in session.game.players[playerIx].units {
+		if unit.type == .MCV || unit.type == .TONK do return true
+	}
+	return false
 }
 
 nextPlayer :: proc() {
