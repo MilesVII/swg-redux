@@ -268,14 +268,13 @@ drawGoldMarks :: proc(position: hex.Axial, gold: int) {
 	}
 }
 
-EXPLOSION_ANIMATION_S := f32(1.0)
-drawExplosion :: proc(at: hex.Axial, fade: f32) -> f32 {
+drawExplosion :: proc(at: hex.Axial, progress: f32) -> f32 {
 	vx := hex.vertesex(at, 1.3)
 	color := rl.RED
-	color.a = u8(fade * 255)
+	color.a = u8(progress * 255)
 	rl.DrawTriangleFan(&vx[0], 6, color)
 
-	return fade - rl.GetFrameTime() / EXPLOSION_ANIMATION_S
+	return rl.GetFrameTime()
 }
 
 button :: proc(

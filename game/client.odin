@@ -16,6 +16,13 @@ import "utils"
 import "networking"
 import "shaded"
 
+@(private)
+EXPLOSION_DURATION_S := f32(2.2)
+@(private)
+EXPLOSION_HATTRICK_S := f32(1.1)
+@(private)
+EXPLOSION_CHAINING_S := f32(0.5)
+
 ClientStatus :: enum {
 	CONNECTING, LOBBY, WAITING, PLAYING, FINISH
 }
@@ -38,7 +45,8 @@ OrderSet :: map[int]Order
 
 Explosion :: struct {
 	at: hex.Axial,
-	fade: f32
+	elapsedTime: f32,
+	bonked: bool
 }
 
 ClientState :: struct {
@@ -59,8 +67,12 @@ clientState := ClientState {
 	uiState = UIState.DISABLED,
 	orders = make(OrderSet)
 }
-@(private="file")
-updateBuffer: Update
+@(private)
+clientUpdateBuffer: Update
+@(private)
+clientUpdateAnimationsPending: bool = false
+@(private)
+clientFirstUpdate: bool = true
 
 stripeShader: shaded.StripedShader
 
@@ -115,12 +127,25 @@ clientDrawWorld :: proc() {
 		}
 	}
 
-	for &bonk in clientState.explosions {
-		bonk.fade = ui.drawExplosion(bonk.at, bonk.fade)
-	}
-
-	for i := len(clientState.explosions) - 1; i >= 0; i -= 1 {
-		if clientState.explosions[i].fade <= 0 do unordered_remove(&clientState.explosions, i)
+	if clientUpdateAnimationsPending {
+		for &bonk in clientState.explosions {
+			bonk.elapsedTime += ui.drawExplosion(bonk.at, bonk.elapsedTime / EXPLOSION_DURATION_S)
+			if !bonk.bonked && bonk.elapsedTime > EXPLOSION_HATTRICK_S {
+				bonk.bonked = true
+				uix, pix, found := findUnitAt(&clientState.game, bonk.at)
+				if found do unordered_remove(&clientState.game.players[pix].units, uix)
+			}
+			if bonk.elapsedTime < EXPLOSION_CHAINING_S do break
+		}
+		for i := len(clientState.explosions) - 1; i >= 0; i -= 1 {
+			if clientState.explosions[i].elapsedTime >= EXPLOSION_DURATION_S {
+				unordered_remove(&clientState.explosions, i)
+			}
+		}
+		if len(clientState.explosions) == 0 {
+			promoteStateChange()
+			clientUpdateAnimationsPending = false
+		}
 	}
 }
 
@@ -139,7 +164,7 @@ connect :: proc(to: net.Address, port: int) {
 @(private="file")
 processPackage :: proc(p: networking.Package) {
 	updateCurrentPlayer :: proc(color: rl.Color) {
-		clientState.color = updateBuffer.meta.yourColor
+		clientState.color = clientUpdateBuffer.meta.yourColor
 		for &player, index in clientState.game.players {
 			if player.color == color {
 				clientState.currentPlayer = index
@@ -151,26 +176,53 @@ processPackage :: proc(p: networking.Package) {
 	switch p.header.message {
 		case .JOIN: // ignored
 		case .UPDATE:
-			deleteState(clientState.game)
 			clear(&clientState.orders)
 
-			decode(p.payload, &updateBuffer)
-			clientState.game = updateBuffer.gameState
+			if clientUpdateAnimationsPending {
+				promoteStateChange()
+				clientUpdateAnimationsPending = false
+			}
 
-			updateCurrentPlayer(updateBuffer.meta.yourColor)
+			decode(p.payload, &clientUpdateBuffer)
+			updateCurrentPlayer(clientUpdateBuffer.meta.yourColor)
+			promoteStatusChange()
 
-			if clientState.status == .CONNECTING {
+			if clientFirstUpdate {
+				promoteStateChange()
+
 				spawn := clientState.game.players[clientState.currentPlayer].units[0].position
 				ui.camera.target = hex.axialToWorld(spawn)
-			}
-			clientState.status = updateBuffer.meta.activeIsYou ? .PLAYING : .WAITING
-			if updateBuffer.meta.activeIsYou do clientState.uiState = .FREE
 
-			for bonk in updateBuffer.explosions {
-				append(&clientState.explosions, Explosion { bonk, 1 })
+				clientFirstUpdate = false
+			} else {
+				if len(clientUpdateBuffer.explosions) > 0 {
+					clientUpdateAnimationsPending = true
+				} else do promoteStateChange();
+			}
+
+			for bonk in clientUpdateBuffer.explosions {
+				append(
+					&clientState.explosions,
+					Explosion {
+						at = bonk,
+						elapsedTime = 1,
+						bonked = false
+					}
+				)
 			}
 		case .ORDERS: // ignored
 	}
+}
+
+@(private="file")
+promoteStateChange :: proc() {
+	deleteState(clientState.game)
+	clientState.game = clientUpdateBuffer.gameState
+}
+@(private="file")
+promoteStatusChange :: proc() {
+	clientState.status = clientUpdateBuffer.meta.activeIsYou ? .PLAYING : .WAITING
+	if clientUpdateBuffer.meta.activeIsYou do clientState.uiState = .FREE
 }
 
 @(private="file")
