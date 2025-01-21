@@ -75,6 +75,7 @@ clientUpdateAnimationsPending: bool = false
 clientFirstUpdate: bool = true
 
 stripeShader: shaded.StripedShader
+shockShader: shaded.ShockShader
 
 client :: proc(to: net.Address, port: int, name: string) {
 	rl.SetTraceLogLevel(.WARNING)
@@ -85,12 +86,14 @@ client :: proc(to: net.Address, port: int, name: string) {
 	rl.SetExitKey(.KEY_NULL)
 	rl.SetTargetFPS(240)
 	ui.initTextTextures()
+	ui.onResize()
 
 	networking.init()
 	clientState.name = name
 	connect(to, port)
 
 	stripeShader = shaded.createStripedShader()
+	shockShader = shaded.createShockShader()
 
 	for !rl.WindowShouldClose() {
 		for synchan.can_recv(networking.rx) {
@@ -100,7 +103,30 @@ client :: proc(to: net.Address, port: int, name: string) {
 
 		if clientState.status != .PLAYING do clientState.uiState = .DISABLED
 		ui.updateIO()
-		ui.draw(clientDrawWorld, clientDrawHUD)
+		ui.draw(clientDrawWorld, clientDrawHUD, clientPostFX)
+	}
+}
+
+@(private="file")
+clientPostFX :: proc(tex: rl.RenderTexture2D) {
+	for bonk in clientState.explosions {
+		rl.BeginTextureMode(tex)
+
+		origin := hex.axialToWorld(bonk.at)
+		screenOrigin := rl.GetWorldToScreen2D(origin, ui.camera)
+		shockShader.state.origin = { screenOrigin.x, f32(ui.windowSize.y) - screenOrigin.y }
+		shockShader.state.progress = bonk.elapsedTime / EXPLOSION_DURATION_S
+		shockShader.state.resolution = { f32(ui.windowSize.x), f32(ui.windowSize.y) }
+		shaded.updateShockShader(shockShader, tex)
+
+		rl.BeginShaderMode(shockShader.shader)
+		rl.DrawTextureRec(
+			tex.texture,
+			{ 0, 0, f32(tex.texture.width), f32(-tex.texture.height) },
+			{ 0, 0 }, rl.WHITE
+		)
+		rl.EndShaderMode()
+		rl.EndTextureMode()
 	}
 }
 

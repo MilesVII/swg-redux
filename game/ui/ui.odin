@@ -37,6 +37,11 @@ UI_TEXT_ABT: rl.Texture2D
 DOTTED_FLICKER_S :: 1.0
 DOTTED_WIDTH :: 8.0
 
+@(private)
+rt: rl.RenderTexture2D
+@(private)
+rtLoaded := false
+
 initTextTextures :: proc() {
 	font := rl.GetFontDefault() // rl.LoadFont("./assets/JetBrainsMono-Regular.ttf")
 
@@ -82,13 +87,18 @@ initTextTextures :: proc() {
 	rl.UnloadImage(imageAbt)
 }
 
+onResize :: proc() {
+	windowSize.x = rl.GetScreenWidth()
+	windowSize.y = rl.GetScreenHeight()
+	if rtLoaded do rl.UnloadRenderTexture(rt)
+	rt = rl.LoadRenderTexture(windowSize.x, windowSize.y)
+	rtLoaded = true
+}
+
 updateIO :: proc() {
 	utils.feedClick()
 
-	if rl.IsWindowResized() {
-		windowSize.x = rl.GetScreenWidth()
-		windowSize.y = rl.GetScreenHeight()
-	}
+	if rl.IsWindowResized() do onResize()
 	dt := rl.GetFrameTime()
 	pointer = rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
 
@@ -115,21 +125,29 @@ updateIO :: proc() {
 	pointedCell = hex.worldToAxial(pointer)
 }
 
-draw :: proc(world: proc(), hud: proc()) {
+draw :: proc(world: proc(), hud: proc(), pfx: proc(tex: rl.RenderTexture2D)) {
 	utils.cursorHoverBegin()
 	defer utils.cursorHoverEnd()
+
+	rl.BeginTextureMode(rt)
+		rl.ClearBackground(rl.RAYWHITE)
+
+		rl.BeginMode2D(camera)
+		world()
+		rl.EndMode2D()
+
+		hud()
+	rl.EndTextureMode()
+
+	pfx(rt)
+
 	rl.BeginDrawing()
-	defer rl.EndDrawing()
-
-	rl.ClearBackground(rl.RAYWHITE)
-
-	rl.BeginMode2D(camera)
-
-	world()
-
-	rl.EndMode2D()
-
-	hud()
+		rl.DrawTextureRec(
+			rt.texture,
+			{ 0, 0, f32(rt.texture.width), f32(-rt.texture.height) },
+			{ 0, 0 }, rl.WHITE
+		)
+	rl.EndDrawing()
 }
 
 drawGrid :: proc(grid: hex.Grid(hex.GridCell)) {
