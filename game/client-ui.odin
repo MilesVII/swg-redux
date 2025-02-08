@@ -366,7 +366,8 @@ drawTurnControl :: proc() {
 			rl.BLACK
 		},
 		clientSayOrders,
-		.ENTER
+		.ENTER,
+		progressShader=&progressShader
 	)
 	if selectedUnit != nil {
 		ui.button(

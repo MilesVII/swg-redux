@@ -76,6 +76,7 @@ clientFirstUpdate: bool = true
 
 stripeShader: shaded.StripedShader
 shockShader: shaded.ShockShader
+progressShader: shaded.ProgressShader
 
 client :: proc(to: net.Address, port: int, name: string) {
 	rl.SetTraceLogLevel(.WARNING)
@@ -94,6 +95,7 @@ client :: proc(to: net.Address, port: int, name: string) {
 
 	stripeShader = shaded.createStripedShader()
 	shockShader = shaded.createShockShader()
+	progressShader = shaded.createProgressShader()
 
 	for !rl.WindowShouldClose() {
 		for synchan.can_recv(networking.rx) {

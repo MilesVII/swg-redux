@@ -301,10 +301,10 @@ button :: proc(
 	caption: rl.Texture2D,
 	colors: [2]rl.Color,
 	action: proc(),
-	hotkey: rl.KeyboardKey,
+	hotkey: rl.KeyboardKey = .KEY_NULL,
 	disabled := false,
 	disabledColor := rl.LIGHTGRAY,
-
+	progressShader: ^shaded.ProgressShader = nil
 ) -> bool {
 	vxOuter := hex.vertesexRaw(position, radius)
 	vxInner := hex.vertesexRaw(position, radius * .8)
@@ -312,7 +312,38 @@ button :: proc(
 	borderColor := disabled ? disabledColor : colors[hovered ? 0 : 1]
 	bgColor := colors[0]
 
-	rl.DrawTriangleFan(&vxOuter[0], 6, borderColor)
+	if (!disabled) {
+		if (progressShader == nil) {
+			if rl.IsKeyPressed(hotkey) do action()
+			else if hovered && utils.isClicked() do action()
+		} else {
+			progress := rl.GetFrameTime() / shaded.PROGRESS_FILL_TIME_S
+			kDown := rl.IsKeyDown(hotkey)
+			mDown := rl.IsMouseButtonDown(.LEFT)
+			if !mDown && !kDown do progressShader.state.value = 0
+
+			if kDown && progressShader.state.value < 1.0 {
+				progressShader.state.value += progress
+				if progressShader.state.value >= 1.0 do action()
+			}
+			if hovered && mDown && progressShader.state.value < 1.0 {
+				progressShader.state.value += progress
+				if progressShader.state.value >= 1.0 do action()
+			}
+		}
+	}
+
+	if progressShader == nil {
+		rl.DrawTriangleFan(&vxOuter[0], 6, borderColor)
+	} else {
+		progressShader.state.center = position
+		progressShader.state.backColor = borderColor
+		progressShader.state.foreColor = rl.RED
+		shaded.updateProgressShader(progressShader^)
+		rl.BeginShaderMode(progressShader.shader)
+		rl.DrawTriangleFan(&vxOuter[0], 6, rl.WHITE)
+		rl.EndShaderMode()
+	}
 	rl.DrawTriangleFan(&vxInner[0], 6, bgColor)
 	
 	textureSize := [2]f32 {
@@ -328,14 +359,7 @@ button :: proc(
 		rl.WHITE
 	)
 
-	if hovered && !disabled {
-		if utils.isClicked() do action()
-
-		return true
-	}
-	if rl.IsKeyPressed(hotkey) && !disabled do action()
-
-	return false
+	return hovered && !disabled
 }
 
 Button :: struct {
