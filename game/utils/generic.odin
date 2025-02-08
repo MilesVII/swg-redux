@@ -2,6 +2,7 @@ package utils
 
 import rl "vendor:raylib"
 import "core:unicode/utf8"
+import "core:math"
 import "core:math/rand"
 
 TAU :: (rl.PI * 2)
@@ -84,4 +85,10 @@ shuffle :: proc(target: []$T) {
 		if i == int(tix) do continue
 		swap(&target[i], &target[tix])
 	}
+}
+
+FLICKER_PERIOD_S := f32(.800)
+flicker: f32
+updateFlicker :: proc() {
+	flicker = math.mod(flicker + rl.GetFrameTime() / FLICKER_PERIOD_S, f32(1.0))
 }

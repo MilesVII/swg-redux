@@ -102,6 +102,7 @@ client :: proc(to: net.Address, port: int, name: string) {
 			data, ok := synchan.recv(networking.rx)
 			processPackage(data)
 		}
+		utils.updateFlicker()
 
 		if clientState.status != .PLAYING do clientState.uiState = .DISABLED
 		ui.updateIO()
@@ -138,9 +139,17 @@ clientDrawWorld :: proc() {
 
 	ui.drawGrid(clientState.game.grid)
 
-	for &player in clientState.game.players {
+	for &player, pix in clientState.game.players {
 		for &unit in player.units {
-			unitHovered := drawUnit(unit.position, unit.type, unit.gold, player.color)
+			ordered := unit.id in clientState.orders
+			highlight := clientState.status == .PLAYING && pix == clientState.currentPlayer && !ordered
+			unitHovered := drawUnit(
+				unit.position,
+				unit.type,
+				unit.gold,
+				player.color,
+				highlight
+			)
 			if player.color != clientState.color do continue
 
 			utils.setCursorHover(unitHovered)

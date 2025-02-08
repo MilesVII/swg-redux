@@ -34,7 +34,6 @@ UI_TEXT_MCV: rl.Texture2D
 UI_TEXT_SUB: rl.Texture2D
 UI_TEXT_ABT: rl.Texture2D
 
-DOTTED_FLICKER_S :: 1.0
 DOTTED_WIDTH :: 8.0
 
 @(private)
@@ -219,7 +218,6 @@ drawLine :: proc(from: rl.Vector2, to: rl.Vector2, thickness: f32, color: rl.Col
 	}
 	
 	if (striped != nil) {
-		striped.state.period = DOTTED_FLICKER_S
 		striped.state.width = DOTTED_WIDTH * camera.zoom * .1
 		striped.state.direction = rl.Vector2Normalize(to - from) * { 1, -1 } // thanks for uniform y direction raysan
 		shaded.updateStripedShader(striped^)

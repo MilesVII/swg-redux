@@ -2,7 +2,7 @@ package game
 
 import rl "vendor:raylib"
 import "core:slice"
-// import "core:fmt"
+import "core:math"
 import "hex"
 import "ui"
 import "utils"
@@ -249,7 +249,7 @@ cloneState :: proc(state: GameState) -> GameState {
 	return newState
 }
 
-drawUnit :: proc(position: hex.Axial, unit: GameUnitType, gold: int, color: rl.Color) -> bool {
+drawUnit :: proc(position: hex.Axial, unit: GameUnitType, gold: int, color: rl.Color, highlight := false) -> bool {
 	hovered := ui.pointedCell == position
 	vx := hex.vertesex(position, hovered ? 1 : .8)
 	rl.DrawTriangleFan(&vx[0], 6, rl.BLACK)
@@ -263,6 +263,13 @@ drawUnit :: proc(position: hex.Axial, unit: GameUnitType, gold: int, color: rl.C
 			ui.drawTriangle(position, true, color, .7)
 			ui.drawTriangle(position, false, color, .7)
 			ui.drawGoldMarks(position, gold)
+	}
+
+	if (highlight) {
+		color := rl.YELLOW
+		easedFlicker := (math.sin(utils.flicker * utils.TAU) + 1) * .5
+		color.a = u8(easedFlicker * 255)
+		ui.drawCellBorder(position, .2, color)
 	}
 
 	return hovered

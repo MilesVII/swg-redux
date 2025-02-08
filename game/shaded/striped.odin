@@ -4,8 +4,9 @@ import rl "vendor:raylib"
 
 import "core:math"
 
+import "../utils"
+
 StripedState :: struct {
-	period: f32,
 	width: f32,
 	direction: rl.Vector2
 }
@@ -21,7 +22,7 @@ createStripedShader :: proc() -> StripedShader {
 
 updateStripedShader :: proc(shader: StripedShader) {
 	shader := shader
-	t := math.mod(f32(rl.GetTime()), shader.state.period) / shader.state.period
+	t := utils.flicker
 
 	rl.SetShaderValue(
 		shader.shader,
