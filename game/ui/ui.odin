@@ -284,13 +284,11 @@ drawGoldMarks :: proc(position: hex.Axial, gold: int, color := rl.GOLD) {
 	}
 }
 
-drawExplosion :: proc(at: hex.Axial, progress: f32) -> f32 {
+drawExplosion :: proc(at: hex.Axial, progress: f32) {
 	vx := hex.vertesex(at, 1.3)
 	color := rl.RED
 	color.a = u8(progress * 255)
 	rl.DrawTriangleFan(&vx[0], 6, color)
-
-	return rl.GetFrameTime()
 }
 
 button :: proc(

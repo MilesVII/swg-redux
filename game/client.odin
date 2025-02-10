@@ -17,11 +17,11 @@ import "networking"
 import "shaded"
 
 @(private)
-EXPLOSION_DURATION_S := f32(2.2)
+EXPLOSION_DURATION_S := f32(3.8)
 @(private)
-EXPLOSION_HATTRICK_S := f32(1.1)
+EXPLOSION_HATTRICK_S := f32(1.9)
 @(private)
-EXPLOSION_CHAINING_S := f32(0.5)
+EXPLOSION_CHAINING_S := f32(2.2)
 
 ClientStatus :: enum {
 	CONNECTING, LOBBY, WAITING, PLAYING, FINISH
@@ -80,7 +80,7 @@ progressShader: shaded.ProgressShader
 
 client :: proc(to: net.Address, port: int, name: string) {
 	rl.SetTraceLogLevel(.WARNING)
-	rl.SetConfigFlags({ .MSAA_4X_HINT, .WINDOW_HIGHDPI, .WINDOW_RESIZABLE })
+	rl.SetConfigFlags({ .WINDOW_RESIZABLE })
 	rl.InitWindow(ui.windowSize.x, ui.windowSize.y, "SWGRedux")
 	defer rl.CloseWindow()
 
@@ -166,17 +166,22 @@ clientDrawWorld :: proc() {
 
 	if clientUpdateAnimationsPending {
 		for &bonk in clientState.explosions {
-			bonk.elapsedTime += ui.drawExplosion(bonk.at, bonk.elapsedTime / EXPLOSION_DURATION_S)
+			bonk.elapsedTime += rl.GetFrameTime()
+			ui.drawExplosion(bonk.at, bonk.elapsedTime / EXPLOSION_DURATION_S)
 			if !bonk.bonked && bonk.elapsedTime > EXPLOSION_HATTRICK_S {
 				bonk.bonked = true
 				uix, pix, found := findUnitAt(&clientState.game, bonk.at)
-				if found do unordered_remove(&clientState.game.players[pix].units, uix)
+				unit := &clientState.game.players[pix].units[uix]
+				if found {
+					if unit.type == .TONK && unit.gold > 1 do unit.gold -= 1
+					else do unordered_remove(&clientState.game.players[pix].units, uix)
+				}
 			}
 			if bonk.elapsedTime < EXPLOSION_CHAINING_S do break
 		}
 		for i := len(clientState.explosions) - 1; i >= 0; i -= 1 {
 			if clientState.explosions[i].elapsedTime >= EXPLOSION_DURATION_S {
-				unordered_remove(&clientState.explosions, i)
+				ordered_remove(&clientState.explosions, i)
 			}
 		}
 		if len(clientState.explosions) == 0 {

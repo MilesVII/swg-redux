@@ -11,7 +11,7 @@ ProgressHexState :: struct {
 
 ProgressShader :: Shader(ProgressHexState)
 
-PROGRESS_FILL_TIME_S := f32(.700)
+PROGRESS_FILL_TIME_S := f32(.320)
 
 createProgressShader :: proc() -> ProgressShader {
 	shader := rl.LoadShader("shaders/prog-vs.glsl", "shaders/prog-fs.glsl");
