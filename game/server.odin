@@ -225,7 +225,8 @@ executeOrder :: proc(playerIx: int, unitId: int, order: Order) {
 			newUnit := GameUnit {
 				position = order.target,
 				type = order.targetUnitType,
-				id = session.game.players[playerIx].unitIdCounter
+				id = session.game.players[playerIx].unitIdCounter,
+				gold = order.targetUnitType == .TONK ? 2 : 0
 			}
 			append(&session.game.players[playerIx].units, newUnit)
 			session.game.players[playerIx].unitIdCounter += 1
@@ -249,7 +250,12 @@ executeOrder :: proc(playerIx: int, unitId: int, order: Order) {
 bonkUnits :: proc() {
 	for bonk in explosionsBuffer {
 		uix, pix, found := findUnitAt(&session.game, bonk)
-		if found do unordered_remove(&session.game.players[pix].units, uix)
+		if found {
+			unit := &session.game.players[pix].units[uix]
+
+			if unit.type == .TONK && unit.gold > 1 do unit.gold -= 1
+			else do unordered_remove(&session.game.players[pix].units, uix)
+		}
 	}
 }
 

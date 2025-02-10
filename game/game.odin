@@ -259,6 +259,7 @@ drawUnit :: proc(position: hex.Axial, unit: GameUnitType, gold: int, color: rl.C
 			ui.drawTriangle(position, true, color, .7)
 		case .TONK:
 			ui.drawTriangle(position, false, color, .7)
+			ui.drawGoldMarks(position, gold, rl.RED)
 		case .MCV:
 			ui.drawTriangle(position, true, color, .7)
 			ui.drawTriangle(position, false, color, .7)
