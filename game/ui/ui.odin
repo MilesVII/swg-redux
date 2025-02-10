@@ -280,7 +280,7 @@ drawGoldMarks :: proc(position: hex.Axial, gold: int, color := rl.GOLD) {
 
 	for i in 0..<gold {
 		origin := origins[i]
-		drawLine(origin + end0, origin + end1, .1, rl.GOLD)
+		drawLine(origin + end0, origin + end1, .1, color)
 	}
 }
 

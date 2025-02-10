@@ -1,8 +1,10 @@
 package game
 
 import rl "vendor:raylib"
+
 import "core:slice"
 import "core:math"
+
 import "hex"
 import "ui"
 import "utils"
