@@ -59,7 +59,8 @@ server :: proc(playerCount: int, mapRadius: int, mapSeed: i64, local: bool, port
 	)
 
 	for &player in session.players do player.online = false
-	session.game = createGame(playerCount, mapRadius)
+	fmt.println("using map seed ", mapSeed)
+	session.game = createGame(playerCount, mapRadius, mapSeed)
 	
 	startListeningForClients()
 
