@@ -55,8 +55,7 @@ ClientState :: struct {
 	status: ClientStatus,
 	uiState: UIState,
 	orders: OrderSet,
-	color: rl.Color,
-	currentPlayer: int,
+	myPix: int,
 	name: string,
 	explosions: [dynamic]Explosion
 }
@@ -144,7 +143,7 @@ clientDrawWorld :: proc() {
 	for &player, pix in clientState.game.players {
 		for &unit in player.units {
 			ordered := unit.id in clientState.orders
-			highlight := clientState.status == .PLAYING && pix == clientState.currentPlayer && !ordered
+			highlight := clientState.status == .PLAYING && pix == clientState.myPix && !ordered
 			unitHovered := drawUnit(
 				unit.position,
 				unit.type,
@@ -152,7 +151,7 @@ clientDrawWorld :: proc() {
 				player.color,
 				highlight
 			)
-			if player.color != clientState.color do continue
+			if pix != clientState.myPix do continue
 
 			utils.setCursorHover(unitHovered)
 
@@ -207,16 +206,6 @@ connect :: proc(to: net.Address, port: int) {
 
 @(private="file")
 processPackage :: proc(p: networking.Package) {
-	updateCurrentPlayer :: proc(color: rl.Color) {
-		clientState.color = clientUpdateBuffer.meta.yourColor
-		for &player, index in clientState.game.players {
-			if player.color == color {
-				clientState.currentPlayer = index
-				return
-			}
-		}
-	}
-
 	switch p.header.message {
 		case .JOIN: // ignored
 		case .UPDATE:
@@ -228,12 +217,12 @@ processPackage :: proc(p: networking.Package) {
 			}
 
 			decode(p.payload, &clientUpdateBuffer)
-			updateCurrentPlayer(clientUpdateBuffer.meta.yourColor)
+			clientState.myPix = clientUpdateBuffer.meta.yourId
 			promoteStatusChange()
 
 			if clientFirstUpdate {
 				promoteStateChange()
-				spawn := clientState.game.players[clientState.currentPlayer].units[0].position
+				spawn := clientState.game.players[clientState.myPix].units[0].position
 				ui.camera.target = hex.axialToWorld(spawn)
 
 				clientFirstUpdate = false

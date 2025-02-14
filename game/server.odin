@@ -32,7 +32,8 @@ Session :: struct {
 TurnMessage :: struct {
 	activePlayer: int,
 	activeIsYou: bool,
-	yourColor: rl.Color
+	yourColor: rl.Color,
+	yourId: int
 }
 Update :: struct {
 	gameState: GameState,
@@ -61,7 +62,6 @@ server :: proc(playerCount: int, mapRadius: int, mapSeed: i64, local: bool, port
 	for &player in session.players do player.online = false
 	fmt.println("using map seed ", mapSeed)
 	session.game = createGame(playerCount, mapRadius, mapSeed)
-	
 	startListeningForClients()
 
 	for {
@@ -205,7 +205,8 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 		meta = {
 			activePlayer = session.activePlayerIx,
 			activeIsYou = playerIndex == session.activePlayerIx,
-			yourColor = session.game.players[playerIndex].color
+			yourColor = session.game.players[playerIndex].color,
+			yourId = playerIndex
 		},
 		explosions = reduceExplosionsToVisible(&reducedState, explosionsBuffer[:])[:]
 	}

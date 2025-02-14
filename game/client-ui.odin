@@ -252,7 +252,7 @@ createOrder :: proc(unitId: int, order: Order) {
 drawOrders :: proc(orders: OrderSet) {
 	for unitId, order in orders {
 		if selectedUnit != nil && selectedUnit.id == unitId && clientState.uiState != .FREE do continue
-		unit, ok := findUnitById(clientState.game.players[clientState.currentPlayer].units[:], unitId)
+		unit, ok := findUnitById(clientState.game.players[clientState.myPix].units[:], unitId)
 		if !ok do continue
 		
 		switch order.type {
