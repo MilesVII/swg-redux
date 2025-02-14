@@ -17,6 +17,8 @@ Axial :: [2]int
 BASIS_X :: rl.Vector2{1.0, 0}
 BASIS_Y :: rl.Vector2{0.5, 0.86602540378}
 
+RADIUS :: 0.57735026919 // 1.0 / math.sqrt(f32(3))
+
 AXIAL_NBS := [?]Axial {
 	Axial{1, 0},
 	Axial{1, -1},
@@ -111,7 +113,7 @@ vertesexRaw :: proc(position: rl.Vector2, rayLength: f32) -> [6]rl.Vector2 {
 vertesex :: proc(position: Axial, scale : f32 = 1) -> [6]rl.Vector2 {
 	displacement := BASIS_X * f32(position.x) + BASIS_Y * f32(position.y)
 	
-	return vertesexRaw(displacement, 1.0 / math.sqrt(f32(3)) * scale)
+	return vertesexRaw(displacement, RADIUS * scale)
 }
 
 distance :: proc(a: Axial, b: Axial) -> int {

@@ -1,6 +1,6 @@
 #version 330
 
-const float MAG = 16.0;
+const float MAG = 6.0;
 
 uniform float progress;
 uniform vec2 resolution;

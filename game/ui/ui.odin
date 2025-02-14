@@ -284,11 +284,17 @@ drawGoldMarks :: proc(position: hex.Axial, gold: int, color := rl.GOLD) {
 	}
 }
 
-drawExplosion :: proc(at: hex.Axial, progress: f32) {
-	vx := hex.vertesex(at, 1.3)
-	color := rl.RED
-	color.a = u8(progress * 255)
-	rl.DrawTriangleFan(&vx[0], 6, color)
+drawExplosion :: proc(at: hex.Axial, progress: f32, sweepShader: ^shaded.SweepShader) {
+	vx := hex.vertesex(at)
+
+	sweepShader.state.center = hex.axialToWorld(at)
+	sweepShader.state.radius = hex.RADIUS
+	sweepShader.state.value = progress
+	shaded.updateSweepShader(sweepShader^)
+	
+	rl.BeginShaderMode(sweepShader.shader)
+	rl.DrawTriangleFan(&vx[0], 6, rl.YELLOW)
+	rl.EndShaderMode()
 }
 
 button :: proc(

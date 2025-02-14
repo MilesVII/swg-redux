@@ -17,11 +17,11 @@ import "networking"
 import "shaded"
 
 @(private)
-EXPLOSION_DURATION_S := f32(3.8)
+EXPLOSION_DURATION_S := f32(1.2)
 @(private)
-EXPLOSION_HATTRICK_S := f32(1.9)
+EXPLOSION_HATTRICK_S := f32(0.32)
 @(private)
-EXPLOSION_CHAINING_S := f32(2.2)
+EXPLOSION_CHAINING_S := f32(0.32)
 
 ClientStatus :: enum {
 	CONNECTING, LOBBY, WAITING, PLAYING, FINISH
@@ -76,6 +76,7 @@ clientFirstUpdate: bool = true
 
 stripeShader: shaded.StripedShader
 shockShader: shaded.ShockShader
+sweepShader: shaded.SweepShader
 progressShader: shaded.ProgressShader
 
 client :: proc(to: net.Address, port: int, name: string) {
@@ -96,6 +97,7 @@ client :: proc(to: net.Address, port: int, name: string) {
 	stripeShader = shaded.createStripedShader()
 	shockShader = shaded.createShockShader()
 	progressShader = shaded.createProgressShader()
+	sweepShader = shaded.createSweepShader()
 
 	for !rl.WindowShouldClose() {
 		for synchan.can_recv(networking.rx) {
@@ -167,7 +169,7 @@ clientDrawWorld :: proc() {
 	if clientUpdateAnimationsPending {
 		for &bonk in clientState.explosions {
 			bonk.elapsedTime += rl.GetFrameTime()
-			ui.drawExplosion(bonk.at, bonk.elapsedTime / EXPLOSION_DURATION_S)
+			ui.drawExplosion(bonk.at, bonk.elapsedTime / (EXPLOSION_HATTRICK_S * 2.0), &sweepShader)
 			if !bonk.bonked && bonk.elapsedTime > EXPLOSION_HATTRICK_S {
 				bonk.bonked = true
 				uix, pix, found := findUnitAt(&clientState.game, bonk.at)
@@ -231,7 +233,6 @@ processPackage :: proc(p: networking.Package) {
 
 			if clientFirstUpdate {
 				promoteStateChange()
-
 				spawn := clientState.game.players[clientState.currentPlayer].units[0].position
 				ui.camera.target = hex.axialToWorld(spawn)
 
@@ -247,7 +248,7 @@ processPackage :: proc(p: networking.Package) {
 					&clientState.explosions,
 					Explosion {
 						at = bonk,
-						elapsedTime = 1,
+						elapsedTime = 0,
 						bonked = false
 					}
 				)
