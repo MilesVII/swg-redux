@@ -251,6 +251,8 @@ executeOrder :: proc(playerIx: int, unitId: int, order: Order) {
 
 bonkUnits :: proc() {
 	for bonk in explosionsBuffer {
+		if !hex.isWithinGrid(bonk, session.game.grid.radius) do continue
+
 		uix, pix, found := findUnitAt(&session.game, bonk)
 		if found {
 			unit := &session.game.players[pix].units[uix]

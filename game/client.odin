@@ -21,7 +21,7 @@ EXPLOSION_DURATION_S := f32(1.2)
 @(private)
 EXPLOSION_HATTRICK_S := f32(0.32)
 @(private)
-EXPLOSION_CHAINING_S := f32(0.32)
+EXPLOSION_CHAINING_S := f32(0.5)
 
 ClientStatus :: enum {
 	CONNECTING, LOBBY, WAITING, PLAYING, FINISH
@@ -169,7 +169,9 @@ clientDrawWorld :: proc() {
 		for &bonk in clientState.explosions {
 			bonk.elapsedTime += rl.GetFrameTime()
 			ui.drawExplosion(bonk.at, bonk.elapsedTime / (EXPLOSION_HATTRICK_S * 2.0), &sweepShader)
-			if !bonk.bonked && bonk.elapsedTime > EXPLOSION_HATTRICK_S {
+			onGrid := hex.isWithinGrid(bonk.at, clientState.game.grid.radius)
+
+			if onGrid && !bonk.bonked && bonk.elapsedTime > EXPLOSION_HATTRICK_S {
 				bonk.bonked = true
 				uix, pix, found := findUnitAt(&clientState.game, bonk.at)
 				unit := &clientState.game.players[pix].units[uix]

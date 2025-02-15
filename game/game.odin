@@ -219,9 +219,18 @@ reduceExplosionsToVisible :: proc(reducedState: ^GameState, explosions: []hex.Ax
 	redex: [dynamic]hex.Axial
 
 	for bonk in explosions {
-		cix := hex.axialToIndex(bonk, reducedState.grid.radius)
-		
-		if reducedState.grid.cells[cix].value.fog != .FOG {
+		onGrid := hex.isWithinGrid(bonk, reducedState.grid.radius)
+
+		if onGrid {
+			cix := hex.axialToIndex(bonk, reducedState.grid.radius)
+			if reducedState.grid.cells[cix].value.fog != .FOG {
+				append(&redex, bonk)
+			}
+		} else {
+			// TODO: check manually if any unit sees the bonk
+			// hex.isVisible(reducedState.grid, unit.position, cell.position.axial)
+
+			// just render them for now
 			append(&redex, bonk)
 		}
 	}
