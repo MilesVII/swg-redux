@@ -174,8 +174,8 @@ clientDrawWorld :: proc() {
 			if onGrid && !bonk.bonked && bonk.elapsedTime > EXPLOSION_HATTRICK_S {
 				bonk.bonked = true
 				uix, pix, found := findUnitAt(&clientState.game, bonk.at)
-				unit := &clientState.game.players[pix].units[uix]
 				if found {
+					unit := &clientState.game.players[pix].units[uix]
 					if unit.type == .TONK && unit.gold > 1 do unit.gold -= 1
 					else do unordered_remove(&clientState.game.players[pix].units, uix)
 				}
