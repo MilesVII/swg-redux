@@ -1,12 +1,12 @@
-port = 7420
 local = true
 # run_as_server = true
+port = 7420
 
 [client]
 name = "fops"
-# server = "127.0.0.1"
+server = "127.0.0.1"
 
 [server]
 players = 2
 radius = 16
-seed = 0
+# seed = 0
