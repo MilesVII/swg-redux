@@ -1,3 +1,4 @@
+[common]
 local = true
 # run_as_server = true
 port = 7420

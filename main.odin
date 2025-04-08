@@ -53,27 +53,30 @@ config :: proc() -> Config {
 
 	section, err := toml.parse_file("config.toml")
 	if !toml.print_error(err) {
-		port, portFound := toml.get(i64, section, "port")
-		if portFound do config.common.port = int(port)
-
-		local, localFound := toml.get(bool, section, "local")
-		if localFound do config.common.local = local
-
-		mode, modeFound := toml.get(bool, section, "run_as_server")
-		if modeFound do config.common.mode = mode ? .Server : .Client
+		commonTable, commonTableFound := toml.get_table(section, "common")
+		if commonTableFound {
+			port, portFound := toml.get(i64, commonTable, "port")
+			if portFound do config.common.port = int(port)
+	
+			local, localFound := toml.get(bool, commonTable, "local")
+			if localFound do config.common.local = local
+	
+			mode, modeFound := toml.get(bool, commonTable, "run_as_server")
+			if modeFound do config.common.mode = mode ? .Server : .Client
+		}
 
 		clientTable, clientTableFound := toml.get_table(section, "client")
 		if clientTableFound {
 			name, nameFound := toml.get(string, clientTable, "name")
 			if nameFound do config.client.name = name
-
+			
 			addressString, addressFound := toml.get(string, clientTable, "server")
 			if addressFound {
-				address, ok := net.aton(addressString, .IP4)
+				address, ok := net.parse_ip4_address(addressString)
 				if ok {
 					config.client.server = address
 				} else {
-					fmt.println("failed to parse server address for client: ", err)
+					fmt.println("failed to parse server address for client")
 				}
 			}
 		}
@@ -115,12 +118,13 @@ main :: proc () {
 				config.common.port,
 				config.client.name
 			)
-		case .Server: game.server(
-			config.server.players,
-			config.server.radius,
-			config.server.seed,
-			config.common.local,
-			config.common.port
-		)
+		case .Server:
+			game.server(
+				config.server.players,
+				config.server.radius,
+				config.server.seed,
+				config.common.local,
+				config.common.port
+			)
 	}
 }
