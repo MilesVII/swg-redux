@@ -11,7 +11,7 @@ ShockState :: struct {
 ShockShader :: Shader(ShockState)
 
 createShockShader :: proc() -> ShockShader {
-	shader := rl.LoadShader(nil, "shaders/shock-fs.glsl");
+	shader := rl.LoadShader(nil, "shaders/shock-fs.glsl")
 	state: ShockState
 
 	return ShockShader{ shader, state }

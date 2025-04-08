@@ -14,7 +14,7 @@ StripedState :: struct {
 StripedShader :: Shader(StripedState)
 
 createStripedShader :: proc() -> StripedShader {
-	shader := rl.LoadShader(nil, "shaders/stripe-fs.glsl");
+	shader := rl.LoadShader(nil, "shaders/stripe-fs.glsl")
 	state: StripedState
 
 	return Shader(StripedState){ shader, state }

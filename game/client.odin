@@ -45,6 +45,7 @@ OrderSet :: map[int]Order
 
 Explosion :: struct {
 	at: hex.Axial,
+	lethal: bool,
 	elapsedTime: f32,
 	bonked: bool
 }
@@ -114,6 +115,7 @@ client :: proc(to: net.Address, port: int, name: string) {
 @(private="file")
 clientPostFX :: proc(tex: rl.RenderTexture2D) {
 	for bonk in clientState.explosions {
+		if !bonk.lethal do continue
 		rl.BeginTextureMode(tex)
 
 		origin := hex.axialToWorld(bonk.at)
@@ -231,14 +233,15 @@ processPackage :: proc(p: networking.Package) {
 			} else {
 				if len(clientUpdateBuffer.explosions) > 0 {
 					clientUpdateAnimationsPending = true
-				} else do promoteStateChange();
+				} else do promoteStateChange()
 			}
 
 			for bonk in clientUpdateBuffer.explosions {
 				append(
 					&clientState.explosions,
 					Explosion {
-						at = bonk,
+						at = bonk.position,
+						lethal = bonk.lethal,
 						elapsedTime = 0,
 						bonked = false
 					}

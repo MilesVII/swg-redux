@@ -38,14 +38,20 @@ TurnMessage :: struct {
 Update :: struct {
 	gameState: GameState,
 	meta: TurnMessage,
-	explosions: []hex.Axial
+	explosions: []ExplosionBufferEntry
+}
+
+ExplosionBufferEntry :: struct {
+	position: hex.Axial,
+	pix: int,
+	lethal: bool
 }
 
 @(private="file")
 serverOrderBuffer: OrderSet
 
 @(private="file")
-explosionsBuffer: [dynamic]hex.Axial
+explosionsBuffer: [dynamic]ExplosionBufferEntry
 
 server :: proc(playerCount: int, mapRadius: int, mapSeed: i64, local: bool, port: int) {
 	session = Session {
@@ -208,7 +214,7 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 			yourColor = session.game.players[playerIndex].color,
 			yourId = playerIndex
 		},
-		explosions = reduceExplosionsToVisible(&reducedState, explosionsBuffer[:])[:]
+		explosions = reduceExplosionsToVisible(&reducedState, playerIndex, explosionsBuffer[:])[:]
 	}
 
 	networking.say(socket, &header, encode(update))
@@ -237,12 +243,20 @@ executeOrder :: proc(playerIx: int, unitId: int, order: Order) {
 			session.game.grid.cells[cellIx].value.gold -= 1
 			unit.gold += 1
 		case .DIREKT:
-			append(&explosionsBuffer, order.target)
+			entry := ExplosionBufferEntry {
+				position = order.target,
+				pix = playerIx
+			}
+			append(&explosionsBuffer, entry)
 		case .INDIREKT:
 			utils.shuffle(BONK_OFFSETS[:])
 
 			for i in 0..<INDIREKT_BARRAGE_SIZE {
-				append(&explosionsBuffer, order.target + BONK_OFFSETS[i])
+				entry := ExplosionBufferEntry {
+					position = order.target + BONK_OFFSETS[i],
+					pix = playerIx
+				}
+				append(&explosionsBuffer, entry)
 			}
 		case .MOVE:
 			unit.position = order.target
@@ -250,15 +264,18 @@ executeOrder :: proc(playerIx: int, unitId: int, order: Order) {
 }
 
 bonkUnits :: proc() {
-	for bonk in explosionsBuffer {
-		if !hex.isWithinGrid(bonk, session.game.grid.radius) do continue
+	for &bonk in explosionsBuffer {
+		if !hex.isWithinGrid(bonk.position, session.game.grid.radius) do continue
 
-		uix, pix, found := findUnitAt(&session.game, bonk)
+		uix, pix, found := findUnitAt(&session.game, bonk.position)
 		if found {
 			unit := &session.game.players[pix].units[uix]
 
 			if unit.type == .TONK && unit.gold > 1 do unit.gold -= 1
-			else do unordered_remove(&session.game.players[pix].units, uix)
+			else {
+				unordered_remove(&session.game.players[pix].units, uix)
+				bonk.lethal = true
+			}
 		}
 	}
 }

@@ -215,14 +215,18 @@ getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 	return reducedState
 }
 
-reduceExplosionsToVisible :: proc(reducedState: ^GameState, explosions: []hex.Axial) -> [dynamic]hex.Axial {
-	redex: [dynamic]hex.Axial
+reduceExplosionsToVisible :: proc(reducedState: ^GameState, playerIx: int, explosions: []ExplosionBufferEntry) -> [dynamic]ExplosionBufferEntry {
+	redex: [dynamic]ExplosionBufferEntry
 
 	for bonk in explosions {
-		onGrid := hex.isWithinGrid(bonk, reducedState.grid.radius)
+		if (playerIx == bonk.pix) {
+			append(&redex, bonk)
+			continue
+		}
+		onGrid := hex.isWithinGrid(bonk.position, reducedState.grid.radius)
 
 		if onGrid {
-			cix := hex.axialToIndex(bonk, reducedState.grid.radius)
+			cix := hex.axialToIndex(bonk.position, reducedState.grid.radius)
 			if reducedState.grid.cells[cix].value.fog != .FOG {
 				append(&redex, bonk)
 			}

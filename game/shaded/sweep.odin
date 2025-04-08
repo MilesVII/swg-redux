@@ -11,7 +11,7 @@ SweepState :: struct {
 SweepShader :: Shader(SweepState)
 
 createSweepShader :: proc() -> SweepShader {
-	shader := rl.LoadShader("shaders/default-vs.glsl", "shaders/sweep-fs.glsl");
+	shader := rl.LoadShader("shaders/default-vs.glsl", "shaders/sweep-fs.glsl")
 	state: SweepState
 
 	return Shader(SweepState){ shader, state }
