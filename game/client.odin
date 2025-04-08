@@ -22,6 +22,8 @@ EXPLOSION_DURATION_S := f32(1.2)
 EXPLOSION_HATTRICK_S := f32(0.32)
 @(private)
 EXPLOSION_CHAINING_S := f32(0.5)
+@(private)
+FRAG_COUNTER_DISAPPEAR_S := f32(4.2)
 
 ClientStatus :: enum {
 	CONNECTING, LOBBY, WAITING, PLAYING, FINISH
@@ -58,14 +60,18 @@ ClientState :: struct {
 	orders: OrderSet,
 	myPix: int,
 	name: string,
-	explosions: [dynamic]Explosion
+	explosions: [dynamic]Explosion,
+	fragCounter: int,
+	fragCounterTTS: f32
 }
 
 @(private)
 clientState := ClientState {
 	status = .CONNECTING,
 	uiState = UIState.DISABLED,
-	orders = make(OrderSet)
+	orders = make(OrderSet),
+	fragCounter = 0,
+	fragCounterTTS = 0
 }
 @(private)
 clientUpdateBuffer: Update
@@ -175,6 +181,8 @@ clientDrawWorld :: proc() {
 
 			if onGrid && !bonk.bonked && bonk.elapsedTime > EXPLOSION_HATTRICK_S {
 				bonk.bonked = true
+				if bonk.lethal do clientState.fragCounter += 1
+
 				uix, pix, found := findUnitAt(&clientState.game, bonk.at)
 				if found {
 					unit := &clientState.game.players[pix].units[uix]
@@ -183,6 +191,10 @@ clientDrawWorld :: proc() {
 				}
 			}
 			if bonk.elapsedTime < EXPLOSION_CHAINING_S do break
+		}
+
+		if allExplosionsBonked() && clientState.fragCounterTTS == 0 {
+			clientState.fragCounterTTS = FRAG_COUNTER_DISAPPEAR_S
 		}
 		for i := len(clientState.explosions) - 1; i >= 0; i -= 1 {
 			if clientState.explosions[i].elapsedTime >= EXPLOSION_DURATION_S {
@@ -218,6 +230,8 @@ processPackage :: proc(p: networking.Package) {
 			if clientUpdateAnimationsPending {
 				promoteStateChange()
 				clientUpdateAnimationsPending = false
+				clientState.fragCounter = 0
+				clientState.fragCounterTTS = 0
 			}
 
 			decode(p.payload, &clientUpdateBuffer)
@@ -284,4 +298,10 @@ clientSayOrders :: proc() {
 	}
 
 	networking.say(clientState.serverSocket, &header, encode(clientState.orders))
+}
+
+@(private)
+allExplosionsBonked :: proc() -> bool {
+	for bonk in clientState.explosions do if !bonk.bonked do return false
+	return true
 }

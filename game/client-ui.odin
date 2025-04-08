@@ -4,6 +4,7 @@ import rl "vendor:raylib"
 
 import "core:math"
 import "core:fmt"
+import "core:strings"
 
 import "ui"
 import "utils"
@@ -98,6 +99,8 @@ clientDrawHUD :: proc() {
 	framerate := math.round(1.0 / rl.GetFrameTime())
 	rl.DrawText(fmt.ctprint(framerate), 4, 16, 10, rl.RED)
 
+	drawFragList()
+
 	if clientState.status != .PLAYING {
 		selectedUnit = nil
 		return
@@ -126,7 +129,8 @@ drawOrdersPreview :: proc() {
 				hex.distance(selectedUnit.position, ui.pointedCell) == 1 && 
 				hex.isWithinGrid(ui.pointedCell, gridRadius) && 
 				clientState.game.grid.cells[pointedIndex].value.walkable &&
-				noOrdersAt(ui.pointedCell, clientState.orders)
+				noOrdersAt(ui.pointedCell, clientState.orders) &&
+				noUnitsAt(ui.pointedCell, clientState.game.players[:])
 
 			if buildingAllowed {
 				utils.setCursorHover(true)
@@ -349,6 +353,39 @@ drawBuildUnitsControl :: proc() {
 		BUTTON_ROW_BLD[:],
 		rl.RED
 	)
+}
+
+fragCaptionCache: map[int]cstring
+getFragLine :: proc(xfactor: int) -> cstring{
+	cached, found := fragCaptionCache[xfactor]
+	if (found) do return cached
+
+	caption := strings.clone_to_cstring(xfactor == 1 ? "TARGET DESTROYED" : fmt.aprintf("x%d TARGET DESTROYED", xfactor))
+	fragCaptionCache[xfactor] = caption
+	return caption
+}
+drawFragList :: proc() {
+	if clientState.fragCounterTTS > 0 {
+		clientState.fragCounterTTS -= rl.GetFrameTime()
+		if clientState.fragCounterTTS <= 0 {
+			clientState.fragCounterTTS = 0
+			clientState.fragCounter = 0
+		}
+	}
+	if clientState.fragCounter == 0 do return
+
+	for i in 0..<clientState.fragCounter {
+		if i > 5 do break
+
+		xfactor := clientState.fragCounter - i
+
+		alphaTTSFactor := clientState.fragCounterTTS > 0 ? clientState.fragCounterTTS / FRAG_COUNTER_DISAPPEAR_S : f32(1)
+		alpha := clamp(f32(5 - i) / 5, 0, 1) * alphaTTSFactor;
+		color := rl.Color { 0, 0, 0, u8(math.round(255 * alpha)) }
+
+		padding := [2]i32 { 8, i32(8 + 10 * (i + 1)) }
+		rl.DrawText(getFragLine(xfactor), padding.x, ui.windowSize.y - padding.y, 8, color)
+	}
 }
 
 drawTurnControl :: proc() {

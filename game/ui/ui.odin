@@ -267,6 +267,7 @@ drawTriangle :: proc(position: hex.Axial, up: bool, color: rl.Color, scale := f3
 }
 
 drawGoldMarks :: proc(position: hex.Axial, gold: int, color := rl.GOLD) {
+	if gold > 3 do return // cheating or debug
 	invertedBasis := hex.BASIS_Y
 	invertedBasis.y *= -1
 	origin0 := hex.axialToWorld(position) + invertedBasis * .5
