@@ -157,7 +157,8 @@ drawOrdersPreview :: proc() {
 			movingAllowed :=
 				ui.pointedCell != selectedUnit.position &&
 				utils.includes(allowedCells, &ui.pointedCell) &&
-				noOrdersAt(ui.pointedCell, clientState.orders)
+				noOrdersAt(ui.pointedCell, clientState.orders) &&
+				noUnitsAt(ui.pointedCell, clientState.game.players[:])
 			
 			if movingAllowed {
 				utils.setCursorHover(true)

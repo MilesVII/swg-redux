@@ -206,12 +206,6 @@ getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 		}
 	}
 
-	for &cell, cellIndex in reducedState.grid.cells {
-		if cell.visible && cell.value.walkable {
-			cell.value.walkable = noUnitsAt(cell.position.axial, reducedState.players[:])
-		}
-	}
-
 	return reducedState
 }
 
