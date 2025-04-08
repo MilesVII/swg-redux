@@ -18,32 +18,42 @@ selectedBuildingUnit : GameUnitType
 
 BUTTON_ATK := ui.Button {
 	action = proc() {
-		clientState.uiState = .ORDER_ATK
+		postponeGenericAction(proc() {
+			clientState.uiState = .ORDER_ATK
+		})
 	},
 	caption = &ui.UI_TEXT_ATK,
 }
 BUTTON_DIG := ui.Button {
 	action = proc() {
-		clientState.uiState = .ORDER_DIG
+		postponeGenericAction(proc() {
+			clientState.uiState = .ORDER_DIG
+		})
 	},
 	caption = &ui.UI_TEXT_DIG
 }
 BUTTON_MOV := ui.Button {
 	action = proc() {
-		clientState.uiState = .ORDER_MOV
+		postponeGenericAction(proc(){
+			clientState.uiState = .ORDER_MOV
+		})
 	},
 	caption = &ui.UI_TEXT_MOV
 }
 BUTTON_BLD := ui.Button {
 	action = proc() {
-		clientState.uiState = .ORDER_BLD
+		postponeGenericAction(proc() {
+			clientState.uiState = .ORDER_BLD
+		})
 	},
 	caption = &ui.UI_TEXT_BLD
 }
 BUTTON_CLR := ui.Button {
 	action = proc() {
-		delete_key(&clientState.orders, selectedUnit.id)
-		clientState.uiState = .FREE
+		postponeGenericAction(proc() {
+			delete_key(&clientState.orders, selectedUnit.id)
+			clientState.uiState = .FREE
+		})
 	},
 	caption = &ui.UI_TEXT_CLR
 }
@@ -69,19 +79,25 @@ BUTTON_ROWS := [GameUnitType][]ui.Button {
 BUTTON_ROW_BLD := [?]ui.Button {
 	{
 		action = proc() {
-			selectedBuildingUnit = .TONK
+			postponeGenericAction(proc() {
+				selectedBuildingUnit = .TONK
+			})
 		},
 		caption = &ui.UI_TEXT_TNK
 	},
 	{
 		action = proc() {
-			selectedBuildingUnit = .GUN
+			postponeGenericAction(proc() {
+				selectedBuildingUnit = .GUN
+			})
 		},
 		caption = &ui.UI_TEXT_GUN
 	},
 	{
 		action = proc() {
-			selectedBuildingUnit = .MCV
+			postponeGenericAction(proc() {
+				selectedBuildingUnit = .MCV
+			})
 		},
 		caption = &ui.UI_TEXT_MCV
 	}
@@ -142,11 +158,14 @@ drawOrdersPreview :: proc() {
 				)
 				rl.EndMode2D()
 				
-				if utils.isClicked() {
-					createOrder(selectedUnit.id, Order {
-						target = ui.pointedCell,
-						targetUnitType = selectedBuildingUnit,
-						type = .BUILD
+				if rl.IsMouseButtonPressed(.LEFT) {
+					postponeClick(OrderAction {
+						unitId = selectedUnit.id,
+						order = {
+							target = ui.pointedCell,
+							targetUnitType = selectedBuildingUnit,
+							type = .BUILD
+						}
 					})
 				}
 			}
@@ -174,10 +193,13 @@ drawOrdersPreview :: proc() {
 					rl.BLUE
 				)
 
-				if utils.isClicked() {
-					createOrder(selectedUnit.id, Order {
-						target = ui.pointedCell,
-						type = .MOVE
+				if rl.IsMouseButtonPressed(.LEFT) {
+					postponeClick(OrderAction {
+						unitId = selectedUnit.id,
+						order = {
+							target = ui.pointedCell,
+							type = .MOVE
+						}
 					})
 				}
 			}
@@ -200,11 +222,14 @@ drawOrdersPreview :: proc() {
 					rl.GOLD
 				)
 				rl.EndMode2D()
-				
-				if utils.isClicked() {
-					createOrder(selectedUnit.id, Order {
-						target = ui.pointedCell,
-						type = .DIG
+
+				if rl.IsMouseButtonPressed(.LEFT) {
+					postponeClick(OrderAction {
+						unitId = selectedUnit.id,
+						order = {
+							target = ui.pointedCell,
+							type = .DIG
+						}
 					})
 				}
 			}
@@ -237,10 +262,13 @@ drawOrdersPreview :: proc() {
 				}
 				rl.EndMode2D()
 
-				if utils.isClicked() {
-					createOrder(selectedUnit.id, Order {
-						target = ui.pointedCell,
-						type = selectedUnit.type == .TONK ? .DIREKT : .INDIREKT
+				if rl.IsMouseButtonPressed(.LEFT) {
+					postponeClick(OrderAction {
+						unitId = selectedUnit.id,
+						order = {
+							target = ui.pointedCell,
+							type = selectedUnit.type == .TONK ? .DIREKT : .INDIREKT
+						}
 					})
 				}
 			}
@@ -403,7 +431,9 @@ drawTurnControl :: proc() {
 			rl.WHITE,
 			rl.BLACK
 		},
-		clientSayOrders,
+		proc() {
+			postponeGenericAction(clientSayOrders)
+		},
 		.ENTER,
 		progressShader=&progressShader
 	)
@@ -417,8 +447,10 @@ drawTurnControl :: proc() {
 				rl.BLACK
 			},
 			proc() {
-				selectedUnit = nil
-				clientState.uiState = .FREE
+				postponeGenericAction(proc() {
+					selectedUnit = nil
+					clientState.uiState = .FREE
+				})
 			},
 			.ESCAPE
 		)

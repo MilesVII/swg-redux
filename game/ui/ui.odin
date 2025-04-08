@@ -95,8 +95,6 @@ onResize :: proc() {
 }
 
 updateIO :: proc() {
-	utils.feedClick()
-
 	if rl.IsWindowResized() do onResize()
 	dt := rl.GetFrameTime()
 	pointer = rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
@@ -318,7 +316,7 @@ button :: proc(
 	if (!disabled) {
 		if (progressShader == nil) {
 			if rl.IsKeyPressed(hotkey) do action()
-			else if hovered && utils.isClicked() do action()
+			else if hovered && rl.IsMouseButtonPressed(.LEFT) do action()
 		} else {
 			progress := rl.GetFrameTime() / shaded.PROGRESS_FILL_TIME_S
 			kDown := rl.IsKeyDown(hotkey)

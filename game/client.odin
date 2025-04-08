@@ -122,6 +122,7 @@ client :: proc(to: net.Address, port: int, name: string) {
 		if clientState.status != .PLAYING do clientState.uiState = .DISABLED
 		ui.updateIO()
 		ui.draw(clientDrawWorld, clientDrawHUD, clientPostFX)
+		flushClickQueue()
 	}
 }
 
@@ -174,9 +175,9 @@ clientDrawWorld :: proc() {
 				unitHovered &&
 				clientState.uiState == .FREE &&
 				(selectedUnit == nil || selectedUnit.id != unit.id) &&
-				utils.isClicked()
-			
-			if shouldSelect do selectedUnit = &unit
+				rl.IsMouseButtonPressed(.LEFT)
+
+			if shouldSelect do postponeClick(SelectAction(&unit))
 		}
 	}
 
