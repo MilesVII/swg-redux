@@ -213,9 +213,13 @@ reduceExplosionsToVisible :: proc(reducedState: ^GameState, playerIx: int, explo
 	redex: [dynamic]ExplosionBufferEntry
 
 	for bonk in explosions {
+		bonk := bonk
 		if (playerIx == bonk.pix) {
+			bonk.pix = 1
 			append(&redex, bonk)
 			continue
+		} else {
+			bonk.pix = -1
 		}
 		onGrid := hex.isWithinGrid(bonk.position, reducedState.grid.radius)
 

@@ -48,6 +48,7 @@ OrderSet :: map[int]Order
 Explosion :: struct {
 	at: hex.Axial,
 	lethal: bool,
+	highlight: bool,
 	elapsedTime: f32,
 	bonked: bool
 }
@@ -181,7 +182,7 @@ clientDrawWorld :: proc() {
 
 			if onGrid && !bonk.bonked && bonk.elapsedTime > EXPLOSION_HATTRICK_S {
 				bonk.bonked = true
-				if bonk.lethal do clientState.fragCounter += 1
+				if bonk.highlight && bonk.lethal do clientState.fragCounter += 1
 
 				uix, pix, found := findUnitAt(&clientState.game, bonk.at)
 				if found {
@@ -256,6 +257,7 @@ processPackage :: proc(p: networking.Package) {
 					Explosion {
 						at = bonk.position,
 						lethal = bonk.lethal,
+						highlight = bonk.pix == 1,
 						elapsedTime = 0,
 						bonked = false
 					}
