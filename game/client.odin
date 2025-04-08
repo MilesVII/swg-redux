@@ -86,6 +86,8 @@ shockShader: shaded.ShockShader
 sweepShader: shaded.SweepShader
 progressShader: shaded.ProgressShader
 
+fragSound: rl.Sound
+
 client :: proc(to: net.Address, port: int, name: string) {
 	rl.SetTraceLogLevel(.WARNING)
 	rl.SetConfigFlags({ .WINDOW_RESIZABLE })
@@ -94,6 +96,10 @@ client :: proc(to: net.Address, port: int, name: string) {
 
 	rl.SetExitKey(.KEY_NULL)
 	rl.SetTargetFPS(240)
+
+	rl.InitAudioDevice()
+	fragSound = rl.LoadSound("assets/wt_obj.ogg")
+
 	ui.initTextTextures()
 	ui.onResize()
 
@@ -182,7 +188,10 @@ clientDrawWorld :: proc() {
 
 			if onGrid && !bonk.bonked && bonk.elapsedTime > EXPLOSION_HATTRICK_S {
 				bonk.bonked = true
-				if bonk.highlight && bonk.lethal do clientState.fragCounter += 1
+				if bonk.highlight && bonk.lethal {
+					rl.PlaySound(fragSound)
+					clientState.fragCounter += 1
+				}
 
 				uix, pix, found := findUnitAt(&clientState.game, bonk.at)
 				if found {
