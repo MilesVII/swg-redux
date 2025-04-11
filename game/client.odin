@@ -89,6 +89,10 @@ postfxShader: shaded.PostFXShader
 
 fragSound: rl.Sound
 
+vcrFont: rl.Font
+
+postfxEnabled := true
+
 client :: proc(to: net.Address, port: int, name: string) {
 	rl.SetTraceLogLevel(.WARNING)
 	rl.SetConfigFlags({ .WINDOW_RESIZABLE })
@@ -97,9 +101,6 @@ client :: proc(to: net.Address, port: int, name: string) {
 
 	rl.SetExitKey(.KEY_NULL)
 	rl.SetTargetFPS(240)
-
-	rl.InitAudioDevice()
-	fragSound = rl.LoadSound("assets/wt_obj.ogg")
 
 	ui.initTextTextures()
 	ui.onResize()
@@ -114,6 +115,11 @@ client :: proc(to: net.Address, port: int, name: string) {
 	sweepShader = shaded.createSweepShader()
 	postfxShader = shaded.createPostFXShader()
 
+	rl.InitAudioDevice()
+	fragSound = rl.LoadSound("assets/wt_obj.ogg")
+
+	vcrFont = rl.LoadFontEx("assets/VCR_OSD_MONO.ttf", 16, nil, 0)
+
 	for !rl.WindowShouldClose() {
 		for synchan.can_recv(networking.rx) {
 			data, ok := synchan.recv(networking.rx)
@@ -127,8 +133,12 @@ client :: proc(to: net.Address, port: int, name: string) {
 		flushClickQueue()
 
 		if rl.IsKeyPressed(.P) {
-			shaded.deletePostFXShader(postfxShader)
-			postfxShader = shaded.createPostFXShader()
+			if rl.IsKeyDown(.LEFT_CONTROL) || rl.IsKeyDown(.RIGHT_CONTROL) {
+				shaded.deletePostFXShader(postfxShader)
+				postfxShader = shaded.createPostFXShader()
+			} else {
+				postfxEnabled = !postfxEnabled
+			}
 		}
 	}
 }
@@ -156,17 +166,19 @@ clientPostFX :: proc(tex: rl.RenderTexture2D) {
 		rl.EndTextureMode()
 	}
 
-	rl.BeginTextureMode(tex)
-	rl.BeginShaderMode(postfxShader.shader)
-	postfxShader.state.windowSize = { f32(ui.windowSize.x), f32(ui.windowSize.y) }
-	shaded.updatePostFXShader(&postfxShader)
-	rl.DrawTextureRec(
-		tex.texture,
-		{ 0, 0, f32(tex.texture.width), f32(-tex.texture.height) },
-		{ 0, 0 }, rl.WHITE
-	)
-	rl.EndShaderMode()
-	rl.EndTextureMode()
+	if postfxEnabled {
+		rl.BeginTextureMode(tex)
+		rl.BeginShaderMode(postfxShader.shader)
+		postfxShader.state.windowSize = { f32(ui.windowSize.x), f32(ui.windowSize.y) }
+		shaded.updatePostFXShader(&postfxShader)
+		rl.DrawTextureRec(
+			tex.texture,
+			{ 0, 0, f32(tex.texture.width), f32(-tex.texture.height) },
+			{ 0, 0 }, rl.WHITE
+		)
+		rl.EndShaderMode()
+		rl.EndTextureMode()
+	}
 }
 
 @(private="file")

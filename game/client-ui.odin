@@ -16,6 +16,9 @@ selectedUnit : ^GameUnit = nil
 @(private)
 selectedBuildingUnit : GameUnitType
 
+FONT_SPACING :: f32(.2)
+FONT_SIZE :: f32(16)
+
 BUTTON_ATK := ui.Button {
 	action = proc() {
 		postponeGenericAction(proc() {
@@ -105,15 +108,31 @@ BUTTON_ROW_BLD := [?]ui.Button {
 
 @(private)
 clientDrawHUD :: proc() {
-	switch clientState.status {
-		case .CONNECTING: rl.DrawText("Connecting to server", 4, 4, 10, rl.BLACK)
-		case .LOBBY:      rl.DrawText("Waiting for players to join", 4, 4, 10, rl.BLACK)
-		case .PLAYING:    rl.DrawText("Your turn", 4, 4, 10, rl.RED)
-		case .WAITING:    rl.DrawText("Waiting for other players", 4, 4, 10, rl.BLACK)
-		case .FINISH:     rl.DrawText("Game over", 4, 4, 10, rl.BLACK)
+	getStatusString :: proc() -> (cstring, rl.Color) {
+		switch clientState.status {
+			case .CONNECTING: return "CONNECTING TO SERVER", rl.BLACK;
+			case .LOBBY:      return "WAITING FOR PLAYERS TO JOIN", rl.BLACK;
+			case .PLAYING:    return "YOUR TURN", rl.RED;
+			case .WAITING:    return "WAITING FOR OTHER PLAYERS", rl.BLACK;
+			case .FINISH:     return "GAME OVER", rl.BLACK;
+		}
+		return "", rl.BLACK
 	}
+
+	status, statusColor := getStatusString()
+	rl.DrawTextEx(
+		vcrFont,
+		status,
+		{ 4, 4 },
+		FONT_SIZE, FONT_SPACING, statusColor
+	)
 	framerate := math.round(1.0 / rl.GetFrameTime())
-	rl.DrawText(fmt.ctprint(framerate), 4, 16, 10, rl.RED)
+	rl.DrawTextEx(
+		vcrFont,
+		fmt.ctprint(framerate),
+		{ 4, 4 + 4 + FONT_SIZE },
+		FONT_SIZE, FONT_SPACING, rl.RED
+	)
 
 	drawFragList()
 
@@ -411,8 +430,13 @@ drawFragList :: proc() {
 		alpha := clamp(f32(5 - i) / 5, 0, 1) * alphaTTSFactor;
 		color := rl.Color { 0, 0, 0, u8(math.round(255 * alpha)) }
 
-		padding := [2]i32 { 8, i32(8 + 10 * (i + 1)) }
-		rl.DrawText(getFragLine(xfactor), padding.x, ui.windowSize.y - padding.y, 8, color)
+		padding := [2]f32 { 8, 8 + FONT_SIZE * (f32(i) + 1) }
+		rl.DrawTextEx(
+			vcrFont,
+			getFragLine(xfactor),
+			{ padding.x, f32(ui.windowSize.y) - padding.y},
+			FONT_SIZE, FONT_SPACING, color
+		)
 	}
 }
 
