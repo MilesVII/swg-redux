@@ -85,6 +85,7 @@ stripeShader: shaded.StripedShader
 shockShader: shaded.ShockShader
 sweepShader: shaded.SweepShader
 progressShader: shaded.ProgressShader
+postfxShader: shaded.PostFXShader
 
 fragSound: rl.Sound
 
@@ -111,6 +112,7 @@ client :: proc(to: net.Address, port: int, name: string) {
 	shockShader = shaded.createShockShader()
 	progressShader = shaded.createProgressShader()
 	sweepShader = shaded.createSweepShader()
+	postfxShader = shaded.createPostFXShader()
 
 	for !rl.WindowShouldClose() {
 		for synchan.can_recv(networking.rx) {
@@ -148,6 +150,18 @@ clientPostFX :: proc(tex: rl.RenderTexture2D) {
 		rl.EndShaderMode()
 		rl.EndTextureMode()
 	}
+
+	rl.BeginTextureMode(tex)
+	rl.BeginShaderMode(postfxShader.shader)
+	postfxShader.state.windowSize = { f32(ui.windowSize.x), f32(ui.windowSize.y) }
+	shaded.updatePostFXShader(&postfxShader)
+	rl.DrawTextureRec(
+		tex.texture,
+		{ 0, 0, f32(tex.texture.width), f32(-tex.texture.height) },
+		{ 0, 0 }, rl.WHITE
+	)
+	rl.EndShaderMode()
+	rl.EndTextureMode()
 }
 
 @(private="file")
