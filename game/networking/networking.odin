@@ -17,7 +17,7 @@ MessageHeader :: struct {
 }
 Package :: struct {
 	header: MessageHeader,
-	payload: string,
+	payload: []u8,
 	socket: net.TCP_Socket
 }
 
@@ -73,7 +73,7 @@ listenBlocking :: proc(channel: synchan.Chan(Package, .Send), socket: net.TCP_So
 		fmt.println(
 			"[net] hear",
 			header.message,
-			header.payloadSize == 0 ? "empty" : transmute(string)hex.encode(hash.hash_string(.SHA256, payload)),
+			header.payloadSize == 0 ? "empty" : chksum(payload),
 			len(payload),
 			"bytes"
 		)
@@ -82,7 +82,7 @@ listenBlocking :: proc(channel: synchan.Chan(Package, .Send), socket: net.TCP_So
 	}
 }
 
-say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: string = "") {
+say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: []u8 = nil) {
 	header.payloadSize = u32(len(payload))
 	// bytes := transmute([^]u8)&payload
 	headerSlice := mem.slice_ptr(header, 1)
@@ -91,7 +91,7 @@ say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: string = ""
 	fmt.println(
 		"[net] say",
 		header.message,
-		header.payloadSize == 0 ? "empty" : transmute(string)hex.encode(hash.hash_string(.SHA256, payload)),
+		header.payloadSize == 0 ? "empty" : chksum(payload),
 		len(payload),
 		"bytes"
 	)
@@ -100,32 +100,28 @@ say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: string = ""
 	if err != nil do fmt.println("no voice (header): ", err)
 
 	if header.payloadSize > 0 {
-		_, err2 := net.send_tcp(socket, transmute([]u8)payload)
+		_, err2 := net.send_tcp(socket, payload)
 		if err2 != nil do fmt.println("no voice (payload): ", err2)
 	}
 }
 
 @(private)
-readPackage :: proc(socket: net.TCP_Socket) -> (bool, MessageHeader, string) {
+readPackage :: proc(socket: net.TCP_Socket) -> (bool, MessageHeader, []u8) {
 	header: MessageHeader
 	headerSlice := mem.slice_ptr(&header, 1)
 	headerBuffer := slice.to_bytes(headerSlice)
 
-	if !fillBuffer(socket, headerBuffer) do return false, header, ""
+	if !fillBuffer(socket, headerBuffer) do return false, header, nil
 
-	if header.payloadSize == 0 do return true, header, ""
+	if header.payloadSize == 0 do return true, header, nil
 
 	payloadBuffer := make([]u8, header.payloadSize)
-	defer delete(payloadBuffer)
-	if !fillBuffer(socket, payloadBuffer) do return false, header, ""
-
-	payload, e3 := strings.clone_from_bytes(payloadBuffer)
-	if e3 != nil {
-		fmt.printfln("failed to convert bytes to string: %s", e3)
-		return false, header, ""
+	if !fillBuffer(socket, payloadBuffer) {
+		delete(payloadBuffer)
+		return false, header, nil
 	}
 
-	return true, header, payload
+	return true, header, payloadBuffer
 }
 
 @(private)
@@ -141,4 +137,11 @@ fillBuffer :: proc(socket: net.TCP_Socket, buffer: []u8) -> bool {
 
 		if (receivedSize == u32(len(buffer))) do return true
 	}
+}
+
+@(private)
+chksum :: proc(payload: []u8) -> string {
+	hashsum := transmute(string)hex.encode(hash.hash_bytes(.SHA256, payload))
+	substring, ok := strings.substring_from(hashsum, len(hashsum) - 6)
+	return ok ? substring : hashsum
 }
