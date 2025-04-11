@@ -262,22 +262,25 @@ drawOrdersPreview :: proc() {
 			}
 
 			if attackAllowed {
+				indirekt := selectedUnit.type != .TONK
+
 				rl.BeginMode2D(ui.camera)
 				ui.drawHexLine(
 					selectedUnit.position,
 					ui.pointedCell,
-					.12, rl.RED
+					.12, rl.RED,
+					indirekt ? 1.5 : 0.5
 				)
 
-				if selectedUnit.type == .TONK {
+				if indirekt {
+					area := hex.nbs(ui.pointedCell)
+					lines := hex.outline(area[:], .2)
+					ui.drawOutline(lines, rl.RED)
+				} else {
 					ui.drawCellBorder(
 						ui.pointedCell,
 						.2, rl.RED
 					)
-				} else {
-					area := hex.nbs(ui.pointedCell)
-					lines := hex.outline(area[:], .2)
-					ui.drawOutline(lines, rl.RED)
 				}
 				rl.EndMode2D()
 
@@ -332,7 +335,7 @@ drawOrders :: proc(orders: OrderSet) {
 				ui.drawHexLine(
 					unit.position,
 					order.target,
-					.12, rl.RED
+					.12, rl.RED, 1.5
 				)
 				area := hex.nbs(order.target)
 				lines := hex.outline(area[:], .2)

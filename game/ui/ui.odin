@@ -194,12 +194,18 @@ drawCellBorder :: proc(position: hex.Axial, thickness: f32, color: rl.Color) {
 	rl.DrawTriangleStrip(&vx[0], 14, color)
 }
 
-drawHexLine :: proc(from: hex.Axial, to: hex.Axial, thickness: f32, color: rl.Color = rl.BLACK) {
+drawHexLine :: proc(
+	from: hex.Axial,
+	to: hex.Axial,
+	thickness: f32,
+	color: rl.Color = rl.BLACK,
+	endStepback: f32 = .5
+) {
 	f := hex.axialToWorld(from)
 	t := hex.axialToWorld(to)
 	ray := rl.Vector2Normalize(t - f) * .5
 	f += ray
-	t += ray * -1
+	t += ray * (endStepback * 2) * -1
 	drawLine(f, t, thickness, color)
 }
 
