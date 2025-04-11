@@ -93,14 +93,14 @@ vcrFont: rl.Font
 
 postfxEnabled := true
 
-client :: proc(to: net.Address, port: int, name: string) {
+client :: proc(to: net.Address, port: int, name: string, framerate: int) {
 	rl.SetTraceLogLevel(.WARNING)
 	rl.SetConfigFlags({ .WINDOW_RESIZABLE })
 	rl.InitWindow(ui.windowSize.x, ui.windowSize.y, "SWGRedux")
 	defer rl.CloseWindow()
 
 	rl.SetExitKey(.KEY_NULL)
-	rl.SetTargetFPS(240)
+	rl.SetTargetFPS(i32(framerate))
 
 	ui.initTextTextures()
 	ui.onResize()

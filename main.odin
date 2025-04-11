@@ -22,7 +22,8 @@ Config :: struct {
 	},
 	client: struct {
 		name: string,
-		server: net.Address
+		server: net.Address,
+		framerate: int
 	},
 	server: struct {
 		players: int,
@@ -39,7 +40,8 @@ DEFAULT_CONFIG := Config {
 	},
 	client = {
 		name = "fops",
-		server = net.IP4_Loopback
+		server = net.IP4_Loopback,
+		framerate = 120
 	},
 	server = {
 		players = 2,
@@ -79,6 +81,9 @@ config :: proc() -> Config {
 					fmt.println("failed to parse server address for client")
 				}
 			}
+
+			framerate, framerateFound := toml.get(i64, clientTable, "framerate_cap")
+			if framerateFound do config.client.framerate = int(framerate)
 		}
 
 		serverTable, serverTableFound := toml.get_table(section, "server")
@@ -116,7 +121,8 @@ main :: proc () {
 			game.client(
 				server,
 				config.common.port,
-				config.client.name
+				config.client.name,
+				config.client.framerate
 			)
 		case .Server:
 			game.server(
