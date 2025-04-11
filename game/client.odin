@@ -125,6 +125,11 @@ client :: proc(to: net.Address, port: int, name: string) {
 		ui.updateIO()
 		ui.draw(clientDrawWorld, clientDrawHUD, clientPostFX)
 		flushClickQueue()
+
+		if rl.IsKeyPressed(.P) {
+			shaded.deletePostFXShader(postfxShader)
+			postfxShader = shaded.createPostFXShader()
+		}
 	}
 }
 

@@ -10,18 +10,18 @@ out vec4 fragColor;
 
 #define PI 3.14159265
 
-#define BRIGHTNESS 1.4
-#define SATURATION 0.7
-#define BLUR 0.42
-#define BLURSIZE 0.2
-#define CHROMABLUR 0.2
-#define CHROMASIZE 2.0
+#define BRIGHTNESS 1.0
+#define SATURATION 0.75
+#define BLUR 0.32
+#define BLURSIZE 0.3
+#define CHROMABLUR 0.23
+#define CHROMASIZE 6.0
 #define SUBCARRIER 1.1 //ripple
-#define CROSSTALK 0.3
+#define CROSSTALK 0.3 //ribbed pixels for pleasure
 #define SCANFLICKER 0.0 //lines marching
 #define INTERFERENCE1 1.5 //wind
-#define INTERFERENCE2 0.002 //bottom gore
-#define SCAN_DEFECT 0.6
+#define INTERFERENCE2 0.003 //bottom gore
+#define SCAN_DEFECT 0.2
 
 const float XRES = 432.0;
 const float YRES = 264.0;
