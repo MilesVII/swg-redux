@@ -145,6 +145,20 @@ client :: proc(to: net.Address, port: int, name: string, framerate: int) {
 
 @(private="file")
 clientPostFX :: proc(tex: rl.RenderTexture2D) {
+	if postfxEnabled {
+		rl.BeginTextureMode(tex)
+		rl.BeginShaderMode(postfxShader.shader)
+		postfxShader.state.windowSize = { f32(ui.windowSize.x), f32(ui.windowSize.y) }
+		shaded.updatePostFXShader(&postfxShader)
+		rl.DrawTextureRec(
+			tex.texture,
+			{ 0, 0, f32(tex.texture.width), f32(-tex.texture.height) },
+			{ 0, 0 }, rl.WHITE
+		)
+		rl.EndShaderMode()
+		rl.EndTextureMode()
+	}
+
 	for bonk in clientState.explosions {
 		if !bonk.lethal do continue
 		rl.BeginTextureMode(tex)
@@ -157,20 +171,6 @@ clientPostFX :: proc(tex: rl.RenderTexture2D) {
 		shaded.updateShockShader(shockShader, tex)
 
 		rl.BeginShaderMode(shockShader.shader)
-		rl.DrawTextureRec(
-			tex.texture,
-			{ 0, 0, f32(tex.texture.width), f32(-tex.texture.height) },
-			{ 0, 0 }, rl.WHITE
-		)
-		rl.EndShaderMode()
-		rl.EndTextureMode()
-	}
-
-	if postfxEnabled {
-		rl.BeginTextureMode(tex)
-		rl.BeginShaderMode(postfxShader.shader)
-		postfxShader.state.windowSize = { f32(ui.windowSize.x), f32(ui.windowSize.y) }
-		shaded.updatePostFXShader(&postfxShader)
 		rl.DrawTextureRec(
 			tex.texture,
 			{ 0, 0, f32(tex.texture.width), f32(-tex.texture.height) },
