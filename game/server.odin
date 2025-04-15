@@ -66,8 +66,20 @@ server :: proc(playerCount: int, mapRadius: int, mapSeed: i64, local: bool, port
 	)
 
 	for &player in session.players do player.online = false
-	fmt.println("using map seed ", mapSeed)
-	session.game = createGame(playerCount, mapRadius, mapSeed)
+	
+	gameInitRetries := 7
+	for gameInitRetries >= 0 {
+		err: GameInitError
+		session.game, err = createGame(playerCount, mapRadius, mapSeed)
+		if err == nil do break
+		else if gameInitRetries == 0 || mapSeed == -1 {
+			fmt.println("failed to create a game, aborting")
+			return
+		}
+		gameInitRetries -= 1
+		fmt.println("failed to create a game, retrying")
+	}
+
 	startListeningForClients()
 
 	for {

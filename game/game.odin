@@ -2,8 +2,10 @@ package game
 
 import rl "vendor:raylib"
 
+import "core:fmt"
 import "core:slice"
 import "core:math"
+import "core:math/rand"
 
 import "hex"
 import "ui"
@@ -107,7 +109,11 @@ findSpawnPoints :: proc(grid: GameGrid) -> [dynamic]hex.Axial {
 	return spawns
 }
 
-createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> GameState {
+GameInitError :: enum { NO_SPAWNS }
+createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> (GameState, GameInitError) {
+	seed := seed == -1 ? rand.int63() : seed
+	fmt.println("using seed ", seed)
+
 	state := GameState {
 		grid = hex.grid(mapRadius, hex.GridCell),
 		players = make([]PlayerState, playerCount)
@@ -130,7 +136,10 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> GameStat
 
 	assert(playerCount <= 6, "can't find more than six spawn points")
 	spawnPoints := findSpawnPoints(state.grid)
-	assert(len(spawnPoints) >= playerCount, "can't find enough spawn points for this seed, please restart")
+	if len(spawnPoints) >= playerCount {
+		delete(state.players)
+		return state, .NO_SPAWNS
+	}
 
 	for &player, i in state.players {
 		units := []GameUnit {
@@ -150,7 +159,7 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> GameStat
 		}
 	}
 
-	return state
+	return state, nil
 }
 
 getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
