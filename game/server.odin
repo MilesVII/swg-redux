@@ -80,6 +80,7 @@ server :: proc(playerCount: int, mapRadius: int, mapSeed: i64, local: bool, port
 		fmt.println("failed to create a game, retrying")
 	}
 
+	fmt.println("session created, listening")
 	startListeningForClients()
 
 	for {
@@ -135,7 +136,6 @@ startClientThread :: proc(socket: ^net.TCP_Socket) {
 processPackage :: proc(p: networking.Package) {
 	fmt.printfln("player %s said %s", p.header.me, p.header.message)
 	playerName := utils.badgeToString(p.header.me)
-	if p.header.payloadSize > 0 do fmt.printfln("payload: %s", p.payload)
 	switch p.header.message {
 		case .JOIN:
 			if onJoin(utils.badgeToString(p.header.me), p.socket) do startGameIfFull()
