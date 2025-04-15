@@ -1,7 +1,7 @@
 # all values are defaults
 [common]
 local = false # connect to/host server via loopback
-mode = client # client / server / lobby / debug
+mode = "client" # client / server / lobby / debug
 port = 7420 # client and game server ports
 
 [client]
@@ -9,7 +9,7 @@ name = "fops" # user id
 framerate_cap = 120
 server = "127.0.0.1" # server address, connect on start unless lobby is specified
 lobby = "127.0.0.1" # lobby address
-lobby_token = 
+lobby_token = ""
 
 [server]
 players = 2
@@ -19,4 +19,4 @@ radius = 16 # map radius
 [lobby]
 port = 7600
 game_ports = 7420-7500
-auth_token = 
+auth_token = ""

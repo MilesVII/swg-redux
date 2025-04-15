@@ -71,8 +71,8 @@ server :: proc(playerCount: int, mapRadius: int, mapSeed: i64, local: bool, port
 	for gameInitRetries >= 0 {
 		err: GameInitError
 		session.game, err = createGame(playerCount, mapRadius, mapSeed)
-		if err == nil do break
-		else if gameInitRetries == 0 || mapSeed == -1 {
+		if err == .OK do break
+		else if gameInitRetries == 0 || mapSeed != -1 {
 			fmt.println("failed to create a game, aborting")
 			return
 		}

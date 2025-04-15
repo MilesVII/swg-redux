@@ -109,7 +109,7 @@ findSpawnPoints :: proc(grid: GameGrid) -> [dynamic]hex.Axial {
 	return spawns
 }
 
-GameInitError :: enum { NO_SPAWNS }
+GameInitError :: enum { OK, NO_SPAWNS }
 createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> (GameState, GameInitError) {
 	seed := seed == -1 ? rand.int63() : seed
 	fmt.println("using seed ", seed)
@@ -136,7 +136,7 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> (GameSta
 
 	assert(playerCount <= 6, "can't find more than six spawn points")
 	spawnPoints := findSpawnPoints(state.grid)
-	if len(spawnPoints) >= playerCount {
+	if len(spawnPoints) < 6 { // stricter check to avoid cramped maps
 		delete(state.players)
 		return state, .NO_SPAWNS
 	}
@@ -158,8 +158,8 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> (GameSta
 			unitIdCounter = 1
 		}
 	}
-
-	return state, nil
+	
+	return state, .OK
 }
 
 getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {

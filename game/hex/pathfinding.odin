@@ -57,7 +57,6 @@ markWalkableAreas :: proc(grid: Grid(GridCell)) {
 		for position in areas[biggestAreaIx] {
 			grid.cells[axialToIndex(position, grid.radius)].value.mainArea = true
 		}
-		fmt.println("marked ", len(areas[biggestAreaIx]), " cells as mainArea")
 	}
 }
 
