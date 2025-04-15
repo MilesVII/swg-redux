@@ -3,6 +3,8 @@
 local = false # connect to/host server via loopback
 mode = "client" # client / server / lobby / debug
 port = 7420 # client and game server ports
+lobby_port = 7600 # client and lobby server ports
+lobby_token = "" # token required to connect to lobby
 
 [client]
 name = "fops" # user id
@@ -17,6 +19,4 @@ radius = 16 # map radius
 # seed = 0 # random unless specified
 
 [lobby]
-port = 7600
-game_ports = 7420-7500
-auth_token = ""
+game_ports = "7420-7500"

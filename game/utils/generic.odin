@@ -43,14 +43,14 @@ cursorHoverEnd :: proc() {
 	rl.SetMouseCursor(cursorHover ? .POINTING_HAND : .DEFAULT)
 }
 
-BadgeSize :: 16
-Badge :: [BadgeSize]rune
+BADGE_SIZE :: 16
+Badge :: [BADGE_SIZE]rune
 
 stringToBadge :: proc(name: string) -> Badge {
 	r : Badge
 	runes := utf8.string_to_runes(name)
 	for c, i in name {
-		if i >= BadgeSize do break
+		if i >= BADGE_SIZE do break
 		r[i] = c
 	}
 	return r
