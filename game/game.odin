@@ -2,7 +2,6 @@ package game
 
 import rl "vendor:raylib"
 
-import "core:fmt"
 import "core:slice"
 import "core:math"
 import "core:math/rand"
@@ -112,7 +111,7 @@ findSpawnPoints :: proc(grid: GameGrid) -> [dynamic]hex.Axial {
 GameInitError :: enum { OK, NO_SPAWNS }
 createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> (GameState, GameInitError) {
 	seed := seed == -1 ? rand.int63() : seed
-	fmt.println("using seed ", seed)
+	// fmt.println("using seed ", seed)
 
 	state := GameState {
 		grid = hex.grid(mapRadius, hex.GridCell),

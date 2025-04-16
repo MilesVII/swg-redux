@@ -4,6 +4,7 @@ import rl "vendor:raylib"
 
 import "core:fmt"
 import "core:net"
+import "core:os"
 import "core:thread"
 import synchan "core:sync/chan"
 
@@ -26,7 +27,8 @@ Session :: struct {
 	activePlayerIx: int,
 	players: []Player,
 	game: GameState,
-	over: bool
+	over: bool,
+	managed: bool
 }
 
 TurnMessage :: struct {
@@ -53,11 +55,14 @@ serverOrderBuffer: OrderSet
 @(private="file")
 explosionsBuffer: [dynamic]ExplosionBufferEntry
 
-server :: proc(playerCount: int, mapRadius: int, mapSeed: i64, local: bool, port: int) {
+server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, local: bool, port: int, lobbyPort: int) {
 	session = Session {
 		activePlayerIx = -1,
-		players = make([]Player, playerCount)
+		players = make([]Player, playerCount),
+		managed = managed
 	}
+	
+	if managed do networking.verbose = false
 
 	networking.init()
 	receptionSocket = networking.openServerSocket(
@@ -73,14 +78,17 @@ server :: proc(playerCount: int, mapRadius: int, mapSeed: i64, local: bool, port
 		session.game, err = createGame(playerCount, mapRadius, mapSeed)
 		if err == .OK do break
 		else if gameInitRetries == 0 || mapSeed != -1 {
-			fmt.println("failed to create a game, aborting")
+			if session.managed do os.write(os.stdout, { LOBBY_SIGNAL_TERMINATE })
+			else do fmt.println("failed to create a game, aborting")
 			return
 		}
 		gameInitRetries -= 1
-		fmt.println("failed to create a game, retrying")
+		if !session.managed do fmt.println("failed to create a game, retrying")
 	}
 
-	fmt.println("session created, listening")
+	if session.managed do os.write(os.stdout, { LOBBY_SIGNAL_READY })
+	else do fmt.println("session created, listening")
+
 	startListeningForClients()
 
 	for {
@@ -97,7 +105,7 @@ startListeningForClients :: proc() {
 		for counter := 0; ; counter += 1 {
 			clientSocket := new(net.TCP_Socket)
 			clientSocket^ = networking.waitForClient(receptionSocket)
-			fmt.printfln("new client, waiting for JOIN")
+			if !session.managed do fmt.printfln("new client, waiting for JOIN")
 			startClientThread(clientSocket)
 		}
 	}
@@ -134,7 +142,7 @@ startClientThread :: proc(socket: ^net.TCP_Socket) {
 
 @(private="file")
 processPackage :: proc(p: networking.Package) {
-	fmt.printfln("player %s said %s", p.header.me, p.header.message)
+	if !session.managed do fmt.printfln("player %s said %s", p.header.me, p.header.message)
 	playerName := utils.badgeToString(p.header.me)
 	switch p.header.message {
 		case .JOIN:
@@ -188,10 +196,10 @@ onJoin :: proc(player: string, socket: net.TCP_Socket) -> bool {
 	}
 
 	if freeSlot == -1 {
-		fmt.println("no slots available for player ", player)
+		if !session.managed do fmt.println("no slots available for player ", player)
 		return false
 	}
-	fmt.println("assigned slot ", freeSlot)
+	if !session.managed do fmt.println("assigned slot ", freeSlot)
 
 	sendUpdate(socket, freeSlot)
 	return true
@@ -201,6 +209,7 @@ onJoin :: proc(player: string, socket: net.TCP_Socket) -> bool {
 startGameIfFull :: proc() {
 	for player in session.players do if !player.online do return
 
+	if session.managed do os.write(os.stdout, { LOBBY_SIGNAL_FULL })
 	session.activePlayerIx = 0
 	broadcastUpdates()
 }

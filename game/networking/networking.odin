@@ -23,6 +23,7 @@ Package :: struct {
 
 tx: synchan.Chan(Package, .Send)
 rx: synchan.Chan(Package, .Recv)
+verbose := true
 
 init :: proc() {
 	channel, err := synchan.create_buffered(
@@ -70,13 +71,15 @@ listenBlocking :: proc(channel: synchan.Chan(Package, .Send), socket: net.TCP_So
 	for {
 		ok, header, payload := readPackage(socket)
 		if !ok do break
-		fmt.println(
-			"[net] hear",
-			header.message,
-			header.payloadSize == 0 ? "empty" : chksum(payload),
-			len(payload),
-			"bytes"
-		)
+		if verbose {
+			fmt.println(
+				"[net] hear",
+				header.message,
+				header.payloadSize == 0 ? "empty" : chksum(payload),
+				len(payload),
+				"bytes"
+			)
+		}
 		
 		synchan.send(channel, Package { header, payload, socket })
 	}
@@ -88,20 +91,22 @@ say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: []u8 = nil)
 	headerSlice := mem.slice_ptr(header, 1)
 	headerBytes := slice.to_bytes(headerSlice)
 
-	fmt.println(
-		"[net] say",
-		header.message,
-		header.payloadSize == 0 ? "empty" : chksum(payload),
-		len(payload),
-		"bytes"
-	)
+	if verbose {
+		fmt.println(
+			"[net] say",
+			header.message,
+			header.payloadSize == 0 ? "empty" : chksum(payload),
+			len(payload),
+			"bytes"
+		)
+	}
 
 	_, err := net.send_tcp(socket, headerBytes)
-	if err != nil do fmt.println("no voice (header): ", err)
+	if err != nil && verbose do fmt.println("no voice (header): ", err)
 
 	if header.payloadSize > 0 {
 		_, err2 := net.send_tcp(socket, payload)
-		if err2 != nil do fmt.println("no voice (payload): ", err2)
+		if err2 != nil && verbose do fmt.println("no voice (payload): ", err2)
 	}
 }
 
@@ -130,7 +135,7 @@ fillBuffer :: proc(socket: net.TCP_Socket, buffer: []u8) -> bool {
 	for {
 		size, e2 := net.recv_tcp(socket, buffer[receivedSize:])
 		receivedSize += u32(size)
-		if e2 != nil {
+		if e2 != nil && verbose {
 			fmt.printfln("error while reading socket: %s", e2)
 			return false
 		}

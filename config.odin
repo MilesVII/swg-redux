@@ -199,7 +199,6 @@ parsePortRange :: proc(range: string) -> (pair: [2]int, ok: bool) {
 @(private="file")
 hashToken :: proc(raw: string) -> AUTH_TOKEN {
 	hashsum := transmute(string)hex.encode(hash.hash_string(.SHA256, raw))
-	fmt.println(hashsum)
 	return stringToHash(hashsum)
 }
 
