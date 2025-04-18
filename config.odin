@@ -20,7 +20,8 @@ Options :: struct {
 	managed: bool,
 	players: int,
 	radius: int,
-	seed: i64
+	seed: i64,
+	port: int
 }
 
 TOKEN_LENGTH :: 64
@@ -96,6 +97,7 @@ config :: proc() -> Config {
 		config.server.players = options.players
 		config.server.radius = options.radius
 		config.server.seed = options.seed
+		config.common.port = options.port
 	}
 
 	return config
@@ -103,74 +105,76 @@ config :: proc() -> Config {
 
 readFileConfig :: proc(filename: string, config: ^Config) {
 	section, err := toml.parse_file(filename)
-	if !toml.print_error(err) {
-		commonTable, commonTableFound := toml.get_table(section, "common")
-		if commonTableFound {
-			port, portFound := toml.get(i64, commonTable, "port")
-			if portFound do config.common.port = int(port)
-	
-			local, localFound := toml.get(bool, commonTable, "local")
-			if localFound do config.common.local = local
-	
-			mode, modeFound := toml.get(string, commonTable, "mode")
-			if modeFound do config.common.mode = modeStringToMode(mode)
+	if err.type != .None {
+		fmt.println("no config: ", err)
+		return
+	}
+	commonTable, commonTableFound := toml.get_table(section, "common")
+	if commonTableFound {
+		port, portFound := toml.get(i64, commonTable, "port")
+		if portFound do config.common.port = int(port)
 
-			lobbyPort, lobbyPortFound := toml.get(i64, commonTable, "lobby_port")
-			if lobbyPortFound do config.common.lobbyPort = int(lobbyPort)
+		local, localFound := toml.get(bool, commonTable, "local")
+		if localFound do config.common.local = local
 
-			token, tokenFound := toml.get(string, commonTable, "lobby_token")
-			if tokenFound do config.common.lobbyToken = hashToken(token)
-		}
+		mode, modeFound := toml.get(string, commonTable, "mode")
+		if modeFound do config.common.mode = modeStringToMode(mode)
 
-		clientTable, clientTableFound := toml.get_table(section, "client")
-		if clientTableFound {
-			name, nameFound := toml.get(string, clientTable, "name")
-			if nameFound do config.client.name = name
-			
-			addressString, addressFound := toml.get(string, clientTable, "server")
-			if addressFound {
-				address, ok := net.parse_ip4_address(addressString)
-				if ok {
-					config.client.server = address
-				} else {
-					fmt.println("failed to parse server address for client")
-				}
-			}
+		lobbyPort, lobbyPortFound := toml.get(i64, commonTable, "lobby_port")
+		if lobbyPortFound do config.common.lobbyPort = int(lobbyPort)
 
-			framerate, framerateFound := toml.get(i64, clientTable, "framerate_cap")
-			if framerateFound do config.client.framerate = int(framerate)
-			
-			lobbyAddress, lobbyAddressFound := toml.get(string, clientTable, "lobby")
-			if lobbyAddressFound {
-				address, ok := net.parse_ip4_address(lobbyAddress)
-				if ok {
-					config.client.lobby = address
-					config.client.lobbyEnabled = true
-				} else {
-					fmt.println("failed to parse server address for client")
-				}
+		token, tokenFound := toml.get(string, commonTable, "lobby_token")
+		if tokenFound do config.common.lobbyToken = hashToken(token)
+	}
+
+	clientTable, clientTableFound := toml.get_table(section, "client")
+	if clientTableFound {
+		name, nameFound := toml.get(string, clientTable, "name")
+		if nameFound do config.client.name = name
+		
+		addressString, addressFound := toml.get(string, clientTable, "server")
+		if addressFound {
+			address, ok := net.parse_ip4_address(addressString)
+			if ok {
+				config.client.server = address
+			} else {
+				fmt.println("failed to parse server address for client")
 			}
 		}
 
-		serverTable, serverTableFound := toml.get_table(section, "server")
-		if serverTableFound {
-			players, playersFound := toml.get(i64, serverTable, "players")
-			if playersFound do config.server.players = int(players)
-			
-			radius, radiusFound := toml.get(i64, serverTable, "radius")
-			if radiusFound do config.server.radius = int(radius)
-			
-			seed, seedFound := toml.get(i64, serverTable, "seed")
-			if seedFound do config.server.seed = seed
-		}
-
-		lobbyTable, lobbyTableFound := toml.get_table(section, "lobby")
-		if lobbyTableFound {
-			portRange, portRangeFound := toml.get(string, lobbyTable, "game_ports")
-			if portRangeFound {
-				parsed, ok := parsePortRange(portRange)
-				if ok do config.lobby.portRange = parsed
+		framerate, framerateFound := toml.get(i64, clientTable, "framerate_cap")
+		if framerateFound do config.client.framerate = int(framerate)
+		
+		lobbyAddress, lobbyAddressFound := toml.get(string, clientTable, "lobby")
+		if lobbyAddressFound {
+			address, ok := net.parse_ip4_address(lobbyAddress)
+			if ok {
+				config.client.lobby = address
+				config.client.lobbyEnabled = true
+			} else {
+				fmt.println("failed to parse server address for client")
 			}
+		}
+	}
+
+	serverTable, serverTableFound := toml.get_table(section, "server")
+	if serverTableFound {
+		players, playersFound := toml.get(i64, serverTable, "players")
+		if playersFound do config.server.players = int(players)
+		
+		radius, radiusFound := toml.get(i64, serverTable, "radius")
+		if radiusFound do config.server.radius = int(radius)
+		
+		seed, seedFound := toml.get(i64, serverTable, "seed")
+		if seedFound do config.server.seed = seed
+	}
+
+	lobbyTable, lobbyTableFound := toml.get_table(section, "lobby")
+	if lobbyTableFound {
+		portRange, portRangeFound := toml.get(string, lobbyTable, "game_ports")
+		if portRangeFound {
+			parsed, ok := parsePortRange(portRange)
+			if ok do config.lobby.portRange = parsed
 		}
 	}
 }

@@ -20,7 +20,7 @@ MenuState :: struct {
 	ngrSent: bool,
 	index: int,
 	animationOffset: f32,
-	sessions: [dynamic]Session
+	sessions: [dynamic]GameSession
 }
 
 menuState: MenuState = {
@@ -97,7 +97,6 @@ drawNGRMenu :: proc() {
 				message := networking.MessageHeader {
 					message = .ORDERS,
 				}
-				fmt.println(menuState.ngr)
 
 				networking.say(
 					clientState.serverSocket,

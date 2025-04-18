@@ -14,8 +14,6 @@ import "networking"
 
 @(private="file")
 receptionSocket : net.TCP_Socket
-@(private="file")
-session: Session
 
 NewGameRequest :: struct {
 	token: [64]rune,
@@ -25,6 +23,14 @@ NewGameRequest :: struct {
 	mapRadius: int
 }
 
+GameSession :: struct {
+	port: int,
+	full: bool,
+	yours: bool,
+	config: NewGameRequest
+}
+
+@(private="file")
 Session :: struct {
 	initiator: net.TCP_Socket,
 	process: os.Process,
@@ -32,7 +38,6 @@ Session :: struct {
 	pipeR: ^os.File,
 	ready: bool,
 	full: bool,
-	yours: bool, // relevant for client only
 	config: NewGameRequest
 }
 
@@ -79,11 +84,14 @@ lobby :: proc(portRange: [2]int, local: bool, port: int, authToken: [64]rune) {
 
 				if err2 != nil || redBytes != 1 do break
 
+				fmt.printfln("srv says %c", message[0])
+
 				switch message[0] {
 					case LOBBY_SIGNAL_READY:
-						session.ready = false
+						session.ready = true
+						sendUpdate(session.initiator)
 					case LOBBY_SIGNAL_FULL:
-						session.full = false
+						session.full = true
 					case LOBBY_SIGNAL_TERMINATE:
 						err3 := os.process_close(session.process)
 				}
@@ -140,7 +148,6 @@ startClientThread :: proc(socket: ^net.TCP_Socket) {
 
 @(private="file")
 processPackage :: proc(p: networking.Package) {
-	fmt.printfln("player %s said %s", p.header.me, p.header.message)
 	playerName := utils.badgeToString(p.header.me)
 	switch p.header.message {
 		case .GENERAL:
@@ -152,19 +159,29 @@ processPackage :: proc(p: networking.Package) {
 			// asking for a new game
 			newGame: NewGameRequest
 			decode(p.payload, &newGame)
-			if newGame.token != lobbyState.token do return
+			if newGame.token != lobbyState.token {
+				fmt.println("no auth")
+				return
+			}
 
 			pipeR, pipeW, pipeE := os.pipe()
-			if pipeE != nil do return
+			if pipeE != nil {
+				fmt.println("no pipe")
+				return
+			}
 
 			port, portFound := pickFreePort()
-			if !portFound do return
+			if !portFound {
+				fmt.println("porn ton found")
+				return
+			}
 
 			process, err := os.process_start(os.Process_Desc {
 				command = {
+					"./swg-redux",
+					"--managed",
 					"--mode", "server",
 					"--port", fmt.aprint(port),
-					"--managed", "true",
 					"--players", fmt.aprint(newGame.playerCount),
 					"--radius", fmt.aprint(newGame.mapRadius),
 					"--seed", fmt.aprint(newGame.mapSeed)
@@ -172,7 +189,10 @@ processPackage :: proc(p: networking.Package) {
 				stdout = pipeW
 			})
 
-			if err == nil do return
+			if err != nil {
+				fmt.println("no process:", err)
+				return
+			}
 
 			append(&lobbyState.sessions, Session {
 				process = process,
@@ -183,24 +203,12 @@ processPackage :: proc(p: networking.Package) {
 				full = false,
 				config = newGame,
 			})
-
-			sendUpdate(p.socket)
 	}
 }
 
 @(private="file")
 broadcastUpdates :: proc() {
-	header := networking.MessageHeader {
-		message = .JOIN,
-	}
-
-	payload := getAvailableSessions()
-	defer delete(payload)
-
-	for client in lobbyState.connectedClients {
-		for &entry in payload do entry.yours = client == entry.initiator
-		networking.say(client, &header, encode(payload))
-	}
+	for client in lobbyState.connectedClients do sendUpdate(client)
 }
 
 @(private="file")
@@ -209,19 +217,24 @@ sendUpdate :: proc(client: net.TCP_Socket) {
 		message = .JOIN,
 	}
 
-	payload := getAvailableSessions()
+	payload := getAvailableSessions(client)
 	defer delete(payload)
 
-	for &entry in payload do entry.yours = client == entry.initiator
 	networking.say(client, &header, encode(payload))
-	fmt.println("sent updates")
 }
 
 @(private="file")
-getAvailableSessions :: proc() -> [dynamic]Session {
-	payload: [dynamic]Session
+getAvailableSessions :: proc(client: net.TCP_Socket) -> [dynamic]GameSession {
+	payload: [dynamic]GameSession
 	for session in lobbyState.sessions {
-		if session.ready && !session.full do append(&payload, session)
+		if session.ready && !session.full {
+			append(&payload, GameSession {
+				config = session.config,
+				full = session.full,
+				port = session.port,
+				yours = client == session.initiator
+			})
+		}
 	}
 	return payload
 }
