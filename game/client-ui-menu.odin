@@ -5,6 +5,7 @@ import "ui"
 import "networking"
 
 import "core:fmt"
+import "core:math"
 import "core:strings"
 
 import rl "vendor:raylib"
@@ -18,6 +19,7 @@ MenuState :: struct {
 	ngr: NewGameRequest,
 	ngrSent: bool,
 	index: int,
+	animationOffset: f32,
 	sessions: [dynamic]Session
 }
 
@@ -31,6 +33,7 @@ menuState: MenuState = {
 }
 
 drawMenu :: proc() {
+	menuState.animationOffset = decay(menuState.animationOffset, 6, rl.GetFrameTime())
 	switch menuState.status {
 		case .MAIN: drawMain()
 		case .NEW_GAME: drawNGRMenu()
@@ -129,9 +132,13 @@ drawNGRMenu :: proc() {
 
 @(private="file")
 menuNavigation :: proc(listLength: int) {
+	startIndex := menuState.index
+
 	if rl.IsKeyPressed(.UP) do menuState.index -= 1
 	if rl.IsKeyPressed(.DOWN) do menuState.index += 1
 	menuState.index = wrapClamp(menuState.index, 0, listLength - 1)
+
+	menuState.animationOffset += f32(startIndex - menuState.index)
 }
 
 @(private="file")
@@ -143,16 +150,20 @@ drawItemButton :: proc(caption: string, offset: int, color := rl.BLACK) {
 		UI_CORNER_PAD.x,
 		f32(ui.windowSize.y) * .5 - FONT_SIZE * .5
 	}
-	indexDisplacement := offset - menuState.index
-	vOffset := f32(indexDisplacement) * (FONT_SIZE + UI_SPACING)
-	alpha := clamp(f32(1) - abs(f32(indexDisplacement)) * .25, .5, 1.0)
+	lineH := FONT_SIZE + UI_SPACING
+	indexDisplacement := f32(offset - menuState.index)
+	vOffset := (indexDisplacement - menuState.animationOffset) * lineH
+	alpha := clamp(f32(1) - abs(indexDisplacement) * .25, .5, 1.0)
 
 	color := color
 	color.a = u8(255 * alpha)
 
 	if offset == menuState.index {
 		drawSelectorBullet(
-			origin + { bulletRadius, FONT_SIZE * .5 },
+			origin + {
+				bulletRadius,
+				FONT_SIZE * .5 - menuState.animationOffset * lineH
+			},
 			bulletRadius
 		)
 	}
@@ -180,4 +191,9 @@ wrapClamp :: proc(value: int, min: int, max: int) -> int {
 	if value < min do return max
 	else if value > max do return min
 	else do return value
+}
+
+@(private="file")
+decay :: proc(value: f32, decay: f32, dt: f32) -> f32 {
+	return value * math.exp_f32(-decay * dt)
 }
