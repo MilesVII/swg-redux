@@ -127,7 +127,6 @@ client :: proc(
 
 	networking.init()
 	clientState.name = name
-	menuState.ngr.token = lobbyToken
 
 	stripeShader = shaded.createStripedShader()
 	shockShader = shaded.createShockShader()
@@ -140,8 +139,11 @@ client :: proc(
 
 	vcrFont = rl.LoadFontEx("assets/VCR_OSD_MONO.ttf", 16, nil, 0)
 
-	fmt.println(lobbyEnabled)
 	if lobbyEnabled {
+		menuState.ngr.token = lobbyToken
+		menuState.ngr.name = name
+		menuState.lobbyAddress = lobbyAddress
+
 		clientState.status = .CONNECTING_L
 		connectToLobby(lobbyAddress, lobbyPort)
 	} else {
@@ -278,7 +280,7 @@ clientDrawWorld :: proc() {
 	}
 }
 
-@(private="file")
+@(private)
 connect :: proc(to: net.Address, port: int) {
 	clientState.serverSocket = networking.dial(to, port)
 	startListening()

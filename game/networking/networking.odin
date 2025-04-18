@@ -57,6 +57,10 @@ dial :: proc(to: net.Address, port: int) -> net.TCP_Socket {
 	return socket
 }
 
+hang :: proc(socket: net.TCP_Socket) {
+	net.close(socket)
+}
+
 waitForClient :: proc(socket: net.TCP_Socket) -> net.TCP_Socket {
 	clientSocket, clientEndpoint, acceptErr := net.accept_tcp(socket)
 

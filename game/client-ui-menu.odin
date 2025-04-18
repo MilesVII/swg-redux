@@ -6,6 +6,7 @@ import "networking"
 
 import "core:fmt"
 import "core:math"
+import "core:net"
 import "core:strings"
 
 import rl "vendor:raylib"
@@ -20,15 +21,15 @@ MenuState :: struct {
 	ngrSent: bool,
 	index: int,
 	animationOffset: f32,
-	sessions: [dynamic]GameSession
+	sessions: [dynamic]GameSession,
+	lobbyAddress: net.Address
 }
 
 menuState: MenuState = {
 	ngr = {
 		mapRadius = 16,
 		playerCount = 2,
-		mapSeed = -1,
-		name = clientState.name
+		mapSeed = -1
 	}
 }
 
@@ -45,7 +46,8 @@ drawMain :: proc() {
 	menuNavigation(max(3, len(menuState.sessions) + 2 - 1))
 
 	if rl.IsKeyPressed(.ENTER) {
-		switch i := menuState.index; i {
+		fmt.println(menuState.index, len(menuState.sessions), len(menuState.sessions) > 0)
+		switch menuState.index {
 			case 0:
 				// start requesting new game
 				if !menuState.ngrSent do menuState.status = .NEW_GAME
@@ -58,9 +60,14 @@ drawMain :: proc() {
 					clientState.serverSocket,
 					&message
 				)
-			case i > 1 && len(menuState.sessions) > 0:
+			case:
+				if (menuState.index <= 1 || len(menuState.sessions) == 0) do break
 				clientState.status = .CONNECTING
-				
+				networking.hang(clientState.serverSocket)
+				connect(
+					menuState.lobbyAddress,
+					menuState.sessions[menuState.index - 2].port
+				)
 		}
 	}
 
