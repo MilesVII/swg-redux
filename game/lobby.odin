@@ -84,8 +84,6 @@ lobby :: proc(portRange: [2]int, local: bool, port: int, authToken: [64]rune) {
 
 				if err2 != nil || redBytes != 1 do break
 
-				fmt.printfln("srv says %c", message[0])
-
 				switch message[0] {
 					case LOBBY_SIGNAL_READY:
 						session.ready = true
