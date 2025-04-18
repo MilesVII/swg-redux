@@ -127,6 +127,7 @@ client :: proc(
 
 	networking.init()
 	clientState.name = name
+	menuState.ngr.token = lobbyToken
 
 	stripeShader = shaded.createStripedShader()
 	shockShader = shaded.createShockShader()
@@ -304,6 +305,8 @@ processPackage :: proc(p: networking.Package, inLobby: bool) {
 			clientState.status = .LOBBY
 			clear(&menuState.sessions)
 			decode(p.payload, &menuState.sessions)
+
+			// check if there is "yours" session
 		case .UPDATE:
 			// game update from server
 			clear(&clientState.orders)

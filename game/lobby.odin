@@ -180,7 +180,8 @@ processPackage :: proc(p: networking.Package) {
 				pipeR = pipeR,
 				initiator = p.socket,
 				ready = false,
-				full = false
+				full = false,
+				config = newGame,
 			})
 
 			sendUpdate(p.socket)
