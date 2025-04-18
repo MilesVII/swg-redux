@@ -62,8 +62,8 @@ DEFAULT_CONFIG := Config {
 	},
 	client = {
 		name = "fops",
-		server = net.IP4_Loopback,
 		framerate = 120,
+		server = net.IP4_Loopback,
 		lobby = net.IP4_Loopback,
 		lobbyEnabled = false
 	},
@@ -88,7 +88,8 @@ config :: proc() -> Config {
 	if cliErr != nil {
 		fmt.println("failed to parse cli parameters: ", cliErr)
 	}
-	if options.mode != nil do config.common.mode = options.mode == .client ? .client : .server
+
+	if options.mode != nil do config.common.mode = options.mode
 	if len(options.name) > 0 do config.client.name = options.name
 	if config.common.mode == .server && options.managed {
 		config.server.managed = true

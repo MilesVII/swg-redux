@@ -26,11 +26,22 @@ EXPLOSION_CHAINING_S := f32(0.5)
 FRAG_COUNTER_DISAPPEAR_S := f32(4.2)
 
 ClientStatus :: enum {
-	CONNECTING, LOBBY, WAITING, PLAYING, FINISH
+	CONNECTING_L,
+	LOBBY,
+	CONNECTING,
+	NOT_FULL,
+	WAITING,
+	PLAYING,
+	FINISH
 }
 
 UIState :: enum {
-	DISABLED, FREE, ORDER_MOV, ORDER_BLD, ORDER_ATK, ORDER_DIG
+	DISABLED,
+	FREE,
+	ORDER_MOV,
+	ORDER_BLD,
+	ORDER_ATK,
+	ORDER_DIG
 }
 
 OrderType :: enum {
@@ -93,7 +104,16 @@ vcrFont: rl.Font
 
 postfxEnabled := true
 
-client :: proc(to: net.Address, port: int, name: string, framerate: int) {
+client :: proc(
+	name: string,
+	framerate: int,
+	server: net.Address,
+	port: int,
+	lobbyEnabled: bool,
+	lobbyAddress: net.Address,
+	lobbyPort: int,
+	lobbyToken: [64]rune
+) {
 	rl.SetTraceLogLevel(.WARNING)
 	rl.SetConfigFlags({ .WINDOW_RESIZABLE })
 	rl.InitWindow(ui.windowSize.x, ui.windowSize.y, "SWGRedux")
@@ -107,7 +127,6 @@ client :: proc(to: net.Address, port: int, name: string, framerate: int) {
 
 	networking.init()
 	clientState.name = name
-	connect(to, port)
 
 	stripeShader = shaded.createStripedShader()
 	shockShader = shaded.createShockShader()
@@ -120,10 +139,18 @@ client :: proc(to: net.Address, port: int, name: string, framerate: int) {
 
 	vcrFont = rl.LoadFontEx("assets/VCR_OSD_MONO.ttf", 16, nil, 0)
 
+	fmt.println(lobbyEnabled)
+	if lobbyEnabled {
+		clientState.status = .CONNECTING_L
+		connectToLobby(lobbyAddress, lobbyPort)
+	} else {
+		connect(server, port)
+	}
+
 	for !rl.WindowShouldClose() {
 		for synchan.can_recv(networking.rx) {
 			data, ok := synchan.recv(networking.rx)
-			processPackage(data)
+			processPackage(data, clientState.status == .LOBBY)
 		}
 		utils.updateFlicker()
 
@@ -263,10 +290,22 @@ connect :: proc(to: net.Address, port: int) {
 }
 
 @(private="file")
-processPackage :: proc(p: networking.Package) {
+connectToLobby :: proc(to: net.Address, port: int) {
+	clientState.serverSocket = networking.dial(to, port)
+	startListening()
+}
+
+@(private="file")
+processPackage :: proc(p: networking.Package, inLobby: bool) {
 	switch p.header.message {
-		case .JOIN: // ignored
+		case .GENERAL:
+		case .JOIN:
+			// lobby offers session list
+			clientState.status = .LOBBY
+			clear(&menuState.sessions)
+			decode(p.payload, &menuState.sessions)
 		case .UPDATE:
+			// game update from server
 			clear(&clientState.orders)
 
 			if clientUpdateAnimationsPending {

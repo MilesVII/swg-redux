@@ -18,6 +18,8 @@ selectedBuildingUnit : GameUnitType
 
 FONT_SPACING :: f32(.2)
 FONT_SIZE :: f32(16)
+UI_SPACING :: 6
+UI_CORNER_PAD :: [2]f32 { UI_SPACING, UI_SPACING }
 
 BUTTON_ATK := ui.Button {
 	action = proc() {
@@ -110,11 +112,13 @@ BUTTON_ROW_BLD := [?]ui.Button {
 clientDrawHUD :: proc() {
 	getStatusString :: proc() -> (cstring, rl.Color) {
 		switch clientState.status {
-			case .CONNECTING: return "CONNECTING TO SERVER", rl.BLACK;
-			case .LOBBY:      return "WAITING FOR PLAYERS TO JOIN", rl.BLACK;
-			case .PLAYING:    return "YOUR TURN", rl.RED;
-			case .WAITING:    return "WAITING FOR OTHER PLAYERS", rl.BLACK;
-			case .FINISH:     return "GAME OVER", rl.BLACK;
+			case .CONNECTING_L: return "CONNECTING TO LOBBY", rl.BLACK;
+			case .LOBBY:        return "", rl.BLACK;
+			case .CONNECTING:   return "CONNECTING TO GAME SERVER", rl.BLACK;
+			case .NOT_FULL:     return "WAITING FOR PLAYERS TO JOIN", rl.BLACK;
+			case .PLAYING:      return "YOUR TURN", rl.RED;
+			case .WAITING:      return "WAITING FOR OTHER PLAYERS", rl.BLACK;
+			case .FINISH:       return "GAME OVER", rl.BLACK;
 		}
 		return "", rl.BLACK
 	}
@@ -123,16 +127,20 @@ clientDrawHUD :: proc() {
 	rl.DrawTextEx(
 		vcrFont,
 		status,
-		{ 4, 4 },
+		UI_CORNER_PAD,
 		FONT_SIZE, FONT_SPACING, statusColor
 	)
 	framerate := math.round(1.0 / rl.GetFrameTime())
 	rl.DrawTextEx(
 		vcrFont,
 		fmt.ctprint(framerate),
-		{ 4, 4 + 4 + FONT_SIZE },
+		UI_CORNER_PAD + { 0, UI_SPACING + FONT_SIZE },
 		FONT_SIZE, FONT_SPACING, rl.RED
 	)
+
+	if clientState.status == .LOBBY {
+		drawMenu()
+	}
 
 	drawFragList()
 
@@ -433,7 +441,7 @@ drawFragList :: proc() {
 		alpha := clamp(f32(5 - i) / 5, 0, 1) * alphaTTSFactor;
 		color := rl.Color { 0, 0, 0, u8(math.round(255 * alpha)) }
 
-		padding := [2]f32 { 8, 8 + FONT_SIZE * (f32(i) + 1) }
+		padding := UI_CORNER_PAD + { 0, 0 + FONT_SIZE * (f32(i) + 1) }
 		rl.DrawTextEx(
 			vcrFont,
 			getFragLine(xfactor),

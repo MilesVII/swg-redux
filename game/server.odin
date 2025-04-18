@@ -17,12 +17,14 @@ receptionSocket : net.TCP_Socket
 @(private="file")
 session : Session
 
+@(private="file")
 Player :: struct {
 	id: Maybe(string),
 	online: bool,
 	socket: net.TCP_Socket
 }
 
+@(private="file")
 Session :: struct {
 	activePlayerIx: int,
 	players: []Player,
@@ -145,6 +147,7 @@ processPackage :: proc(p: networking.Package) {
 	if !session.managed do fmt.printfln("player %s said %s", p.header.me, p.header.message)
 	playerName := utils.badgeToString(p.header.me)
 	switch p.header.message {
+		case .GENERAL:
 		case .JOIN:
 			if onJoin(utils.badgeToString(p.header.me), p.socket) do startGameIfFull()
 		case .UPDATE: //ignored

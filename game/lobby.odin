@@ -15,9 +15,16 @@ import "networking"
 @(private="file")
 receptionSocket : net.TCP_Socket
 @(private="file")
-session : Session
+session: Session
 
-@(private="file")
+NewGameRequest :: struct {
+	token: [64]rune,
+	name: string,
+	playerCount: int,
+	mapSeed: i64,
+	mapRadius: int
+}
+
 Session :: struct {
 	initiator: net.TCP_Socket,
 	process: os.Process,
@@ -25,7 +32,8 @@ Session :: struct {
 	pipeR: ^os.File,
 	ready: bool,
 	full: bool,
-	yours: bool // relevant for client only
+	yours: bool, // relevant for client only
+	config: NewGameRequest
 }
 
 @(private="file")
@@ -34,13 +42,6 @@ lobbyState: struct {
 	portRange: [2]int,
 	sessions: [dynamic]Session,
 	connectedClients: [dynamic]net.TCP_Socket
-}
-
-NewGameRequest :: struct {
-	token: [64]rune,
-	playerCount: int,
-	mapSeed: i64,
-	mapRadius: int
 }
 
 LOBBY_SIGNAL_READY := u8(0)
@@ -60,6 +61,7 @@ lobby :: proc(portRange: [2]int, local: bool, port: int, authToken: [64]rune) {
 	)
 
 	startListeningForClients()
+	fmt.println("lobby online")
 
 	for {
 		for synchan.can_recv(networking.rx) {
@@ -67,7 +69,6 @@ lobby :: proc(portRange: [2]int, local: bool, port: int, authToken: [64]rune) {
 			if ok do processPackage(data)
 		}
 
-		notifyClients := false
 		for &session in lobbyState.sessions {
 			for {
 				hasData, err := os.pipe_has_data(session.pipeR)
@@ -80,20 +81,13 @@ lobby :: proc(portRange: [2]int, local: bool, port: int, authToken: [64]rune) {
 
 				switch message[0] {
 					case LOBBY_SIGNAL_READY:
-						notifyClients = true
 						session.ready = false
 					case LOBBY_SIGNAL_FULL:
-						notifyClients = true
 						session.full = false
 					case LOBBY_SIGNAL_TERMINATE:
-						notifyClients = true
 						err3 := os.process_close(session.process)
 				}
 			}
-		}
-		
-		if notifyClients {
-			sendUpdates()
 		}
 	}
 }
@@ -106,6 +100,7 @@ startListeningForClients :: proc() {
 			clientSocket^ = networking.waitForClient(receptionSocket)
 			fmt.printfln("new client")
 			startClientThread(clientSocket)
+			sendUpdate(clientSocket^)
 		}
 	}
 
@@ -148,9 +143,13 @@ processPackage :: proc(p: networking.Package) {
 	fmt.printfln("player %s said %s", p.header.me, p.header.message)
 	playerName := utils.badgeToString(p.header.me)
 	switch p.header.message {
+		case .GENERAL:
 		case .JOIN:
 		case .UPDATE:
+			// asking for session list
+			sendUpdate(p.socket)
 		case .ORDERS:
+			// asking for a new game
 			newGame: NewGameRequest
 			decode(p.payload, &newGame)
 			if newGame.token != lobbyState.token do return
@@ -183,24 +182,47 @@ processPackage :: proc(p: networking.Package) {
 				ready = false,
 				full = false
 			})
+
+			sendUpdate(p.socket)
 	}
 }
 
 @(private="file")
-sendUpdates :: proc() {
+broadcastUpdates :: proc() {
 	header := networking.MessageHeader {
-		message = .UPDATE,
+		message = .JOIN,
 	}
 
-	payload: [dynamic] Session
-	for session in lobbyState.sessions {
-		if session.ready && !session.full do append(&payload, session)
-	}
+	payload := getAvailableSessions()
+	defer delete(payload)
 
 	for client in lobbyState.connectedClients {
 		for &entry in payload do entry.yours = client == entry.initiator
 		networking.say(client, &header, encode(payload))
 	}
+}
+
+@(private="file")
+sendUpdate :: proc(client: net.TCP_Socket) {
+	header := networking.MessageHeader {
+		message = .JOIN,
+	}
+
+	payload := getAvailableSessions()
+	defer delete(payload)
+
+	for &entry in payload do entry.yours = client == entry.initiator
+	networking.say(client, &header, encode(payload))
+	fmt.println("sent updates")
+}
+
+@(private="file")
+getAvailableSessions :: proc() -> [dynamic]Session {
+	payload: [dynamic]Session
+	for session in lobbyState.sessions {
+		if session.ready && !session.full do append(&payload, session)
+	}
+	return payload
 }
 
 @(private="file")

@@ -11,7 +11,6 @@ name = "fops" # user id
 framerate_cap = 120
 server = "127.0.0.1" # server address, connect on start unless lobby is specified
 lobby = "127.0.0.1" # lobby address
-lobby_token = ""
 
 [server]
 players = 2

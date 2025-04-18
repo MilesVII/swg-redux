@@ -9,7 +9,7 @@ import "core:fmt"
 import "core:strings"
 import synchan "core:sync/chan"
 
-Message :: enum { JOIN, UPDATE, ORDERS }
+Message :: enum { JOIN, UPDATE, ORDERS, GENERAL }
 MessageHeader :: struct {
 	message: Message,
 	me: [16]rune,
