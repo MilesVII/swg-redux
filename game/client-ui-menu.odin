@@ -2,6 +2,7 @@
 package game
 
 import "ui"
+import "utils"
 import "networking"
 
 import "core:fmt"
@@ -114,8 +115,8 @@ drawNGRMenu :: proc() {
 		}
 	}
 
-	left := rl.IsKeyPressed(.LEFT)  || rl.IsKeyPressed(.A) || rl.IsKeyPressedRepeat(.LEFT)  || rl.IsKeyPressedRepeat(.A)
-	rite := rl.IsKeyPressed(.RIGHT) || rl.IsKeyPressed(.D) || rl.IsKeyPressedRepeat(.RIGHT) || rl.IsKeyPressedRepeat(.D)
+	left := checkRepeatedInput(.LEFT, .A)
+	rite := checkRepeatedInput(.RIGHT, .D)
 	switch menuState.index {
 		case 2:
 			if left do menuState.ngr.mapRadius -= 1
@@ -139,8 +140,8 @@ drawNGRMenu :: proc() {
 menuNavigation :: proc(listLength: int) {
 	startIndex := menuState.index
 
-	if rl.IsKeyPressed(.UP) do menuState.index -= 1
-	if rl.IsKeyPressed(.DOWN) do menuState.index += 1
+	if checkRepeatedInput(.UP, .W) do menuState.index -= 1
+	if checkRepeatedInput(.DOWN, .S) do menuState.index += 1
 	menuState.index = wrapClamp(menuState.index, 0, listLength - 1)
 
 	menuState.animationOffset += f32(startIndex - menuState.index)
@@ -186,8 +187,8 @@ drawItemButton :: proc(caption: string, offset: int, color := rl.BLACK) {
 drawSelectorBullet :: proc(origin: [2]f32, radius: f32) {
 	ray := rl.Vector2 { radius, 0 }
 	v0 := origin + ray;
-	v1 := origin + rl.Vector2Rotate(ray, 6.28 * .33)
-	v2 := origin + rl.Vector2Rotate(ray, 6.28 * .66)
+	v1 := origin + rl.Vector2Rotate(ray, utils.TAU * .33)
+	v2 := origin + rl.Vector2Rotate(ray, utils.TAU * .66)
 	rl.DrawTriangle(v2, v1, v0, rl.BLACK)
 }
 
@@ -201,4 +202,12 @@ wrapClamp :: proc(value: int, min: int, max: int) -> int {
 @(private="file")
 decay :: proc(value: f32, decay: f32, dt: f32) -> f32 {
 	return value * math.exp_f32(-decay * dt)
+}
+
+@(private="file")
+checkRepeatedInput :: proc(keys: ..rl.KeyboardKey) -> bool {
+	for key in keys {
+		if rl.IsKeyPressed(key) || rl.IsKeyPressedRepeat(key) do return true
+	}
+	return false
 }
