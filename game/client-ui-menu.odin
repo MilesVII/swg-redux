@@ -46,7 +46,6 @@ drawMain :: proc() {
 	menuNavigation(max(3, len(menuState.sessions) + 2 - 1))
 
 	if rl.IsKeyPressed(.ENTER) {
-		fmt.println(menuState.index, len(menuState.sessions), len(menuState.sessions) > 0)
 		switch menuState.index {
 			case 0:
 				// start requesting new game
