@@ -315,7 +315,7 @@ gameOver :: proc() -> bool {
 
 activeUnitsLeft :: proc(playerIx: int) -> bool {
 	for unit in session.game.players[playerIx].units {
-		if unit.type == .MCV || unit.type == .TONK do return true
+		if unit.type == .MCV do return true
 	}
 	return false
 }
