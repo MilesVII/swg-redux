@@ -71,7 +71,7 @@ drawMain :: proc() {
 		}
 	}
 
-	drawItemButton("REQUEST A NEW GAME", 0, menuState.ngrSent ? rl.GRAY : rl.BLACK)
+	drawItemButton("REQUEST A NEW GAME", 0, menuState.ngrSent ? rl.GRAY : rl.WHITE)
 	drawItemButton("REFRESH SESSION LIST", 1)
 	for session, i in menuState.sessions {
 		drawItemButton(
@@ -148,7 +148,7 @@ menuNavigation :: proc(listLength: int) {
 }
 
 @(private="file")
-drawItemButton :: proc(caption: string, offset: int, color := rl.BLACK) {
+drawItemButton :: proc(caption: string, offset: int, color := rl.WHITE) {
 	bulletRadius := FONT_SIZE * .42
 	bulletSpace := bulletRadius * 2
 
@@ -189,7 +189,7 @@ drawSelectorBullet :: proc(origin: [2]f32, radius: f32) {
 	v0 := origin + ray;
 	v1 := origin + rl.Vector2Rotate(ray, utils.TAU * .33)
 	v2 := origin + rl.Vector2Rotate(ray, utils.TAU * .66)
-	rl.DrawTriangle(v2, v1, v0, rl.BLACK)
+	rl.DrawTriangle(v2, v1, v0, rl.WHITE)
 }
 
 @(private="file")

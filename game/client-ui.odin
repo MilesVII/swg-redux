@@ -109,18 +109,41 @@ BUTTON_ROW_BLD := [?]ui.Button {
 }
 
 @(private)
+clientDrawBackground :: proc() {
+	rl.ClearBackground(rl.RAYWHITE)
+	shaded.updateBackgroundShader(&backgroundShader, ui.camera.offset, ui.camera.zoom)
+	rl.BeginShaderMode(backgroundShader.shader)
+
+	from := rl.GetScreenToWorld2D([2]f32 {0, 0}, ui.camera)
+	to := rl.GetScreenToWorld2D(ui.windowSizeF(), ui.camera)
+
+	rl.DrawRectanglePro(
+		rl.Rectangle {
+			x = from.x,
+			y = from.y,
+			width = to.x - from.x,
+			height = to.y - from.y
+		},
+		rl.Vector2 {0, 0},
+		0,
+		rl.WHITE
+	)
+	rl.EndShaderMode()
+}
+
+@(private)
 clientDrawHUD :: proc() {
 	getStatusString :: proc() -> (cstring, rl.Color) {
 		switch clientState.status {
-			case .CONNECTING_L: return "CONNECTING TO LOBBY", rl.BLACK;
-			case .LOBBY:        return "", rl.BLACK;
-			case .CONNECTING:   return "CONNECTING TO GAME SERVER", rl.BLACK;
-			case .NOT_FULL:     return "WAITING FOR PLAYERS TO JOIN", rl.BLACK;
+			case .CONNECTING_L: return "CONNECTING TO LOBBY", rl.WHITE;
+			case .LOBBY:        return "", rl.WHITE;
+			case .CONNECTING:   return "CONNECTING TO GAME SERVER", rl.WHITE;
+			case .NOT_FULL:     return "WAITING FOR PLAYERS TO JOIN", rl.WHITE;
 			case .PLAYING:      return "YOUR TURN", rl.RED;
-			case .WAITING:      return "WAITING FOR OTHER PLAYERS", rl.BLACK;
-			case .FINISH:       return "GAME OVER", rl.BLACK;
+			case .WAITING:      return "WAITING FOR OTHER PLAYERS", rl.WHITE;
+			case .FINISH:       return "GAME OVER", rl.WHITE;
 		}
-		return "", rl.BLACK
+		return "", rl.WHITE
 	}
 
 	status, statusColor := getStatusString()
@@ -203,7 +226,7 @@ drawOrdersPreview :: proc() {
 				selectedUnit.position,
 				MOVING[selectedUnit.type]
 			)
-			ui.drawOutline(hex.outline(allowedCells), rl.BLACK)
+			ui.drawOutline(hex.outline(allowedCells), rl.WHITE)
 			movingAllowed :=
 				ui.pointedCell != selectedUnit.position &&
 				utils.includes(allowedCells, &ui.pointedCell) &&
@@ -362,9 +385,10 @@ drawOrders :: proc(orders: OrderSet) {
 @(private="file")
 drawOrdersControl :: proc() {
 	buttonSize := f32(32.0)
+	windowSize := ui.windowSizeF()
 	origin := rl.Vector2 {
-		f32(ui.windowSize.x) * .5,
-		f32(ui.windowSize.y) - buttonSize * 1.5
+		windowSize.x * .5,
+		windowSize.y - buttonSize * 1.5
 	}
 
 	orderExists := selectedUnit.id in clientState.orders
@@ -381,8 +405,8 @@ drawOrdersControl :: proc() {
 		origin,
 		buttonSize,
 		{
-			rl.WHITE,
-			rl.BLACK
+			rl.BLACK,
+			rl.WHITE
 		},
 		row
 	)
@@ -392,9 +416,10 @@ drawOrdersControl :: proc() {
 @(private="file")
 drawBuildUnitsControl :: proc() {
 	buttonSize := f32(32.0)
+	windowSize := ui.windowSizeF()
 	origin := rl.Vector2 {
-		f32(ui.windowSize.x) * .5,
-		f32(ui.windowSize.y) - buttonSize * 1.5
+		windowSize.x * .5,
+		windowSize.y - buttonSize * 1.5
 	}
 
 	for &button, index in BUTTON_ROW_BLD {
@@ -405,8 +430,8 @@ drawBuildUnitsControl :: proc() {
 		origin,
 		buttonSize,
 		{
-			rl.WHITE,
-			rl.BLACK
+			rl.BLACK,
+			rl.WHITE
 		},
 		BUTTON_ROW_BLD[:],
 		rl.RED
@@ -454,7 +479,7 @@ drawFragList :: proc() {
 drawTurnControl :: proc() {
 	buttonSize := f32(32.0)
 	orgn := rl.Vector2 {
-		f32(ui.windowSize.x) - buttonSize * 2.5,
+		ui.windowSizeF().x - buttonSize * 2.5,
 		buttonSize * 1.5
 	}
 
@@ -463,8 +488,8 @@ drawTurnControl :: proc() {
 		buttonSize,
 		ui.UI_TEXT_SUB,
 		{
-			rl.WHITE,
-			rl.BLACK
+			rl.BLACK,
+			rl.WHITE
 		},
 		proc() {
 			postponeGenericAction(clientSayOrders)
@@ -478,8 +503,8 @@ drawTurnControl :: proc() {
 			buttonSize,
 			ui.UI_TEXT_ABT,
 			{
-				rl.WHITE,
-				rl.BLACK
+				rl.BLACK,
+				rl.WHITE
 			},
 			proc() {
 				postponeGenericAction(proc() {

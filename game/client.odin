@@ -75,13 +75,14 @@ ClientState :: struct {
 	name: string,
 	explosions: [dynamic]Explosion,
 	fragCounter: int,
-	fragCounterTTS: f32
+	fragCounterTTS: f32,
+	cameraControlsEnabled: bool
 }
 
 @(private)
 clientState := ClientState {
 	status = .CONNECTING,
-	uiState = UIState.DISABLED,
+	uiState = .DISABLED,
 	orders = make(OrderSet),
 	storedGunOrders = make(OrderSet),
 	fragCounter = 0,
@@ -99,6 +100,7 @@ shockShader: shaded.ShockShader
 sweepShader: shaded.SweepShader
 progressShader: shaded.ProgressShader
 postfxShader: shaded.PostFXShader
+backgroundShader: shaded.BackgroundShader
 
 fragSound: rl.Sound
 
@@ -135,6 +137,7 @@ client :: proc(
 	progressShader = shaded.createProgressShader()
 	sweepShader = shaded.createSweepShader()
 	postfxShader = shaded.createPostFXShader()
+	backgroundShader = shaded.createBackgroundShader()
 
 	rl.InitAudioDevice()
 	fragSound = rl.LoadSound("assets/wt_obj.ogg")
@@ -160,8 +163,8 @@ client :: proc(
 		utils.updateFlicker()
 
 		if clientState.status != .PLAYING do clientState.uiState = .DISABLED
-		ui.updateIO()
-		ui.draw(clientDrawWorld, clientDrawHUD, clientPostFX)
+		ui.updateIO(!clientState.cameraControlsEnabled)
+		ui.draw(clientDrawWorld, clientDrawHUD, clientPostFX, clientDrawBackground)
 		flushClickQueue()
 
 		if rl.IsKeyPressed(.P) {
@@ -180,7 +183,7 @@ clientPostFX :: proc(tex: rl.RenderTexture2D) {
 	if postfxEnabled {
 		rl.BeginTextureMode(tex)
 		rl.BeginShaderMode(postfxShader.shader)
-		postfxShader.state.windowSize = { f32(ui.windowSize.x), f32(ui.windowSize.y) }
+		postfxShader.state.windowSize = ui.windowSizeF()
 		shaded.updatePostFXShader(&postfxShader)
 		rl.DrawTextureRec(
 			tex.texture,
@@ -218,6 +221,10 @@ clientDrawWorld :: proc() {
 	if clientState.status == .CONNECTING do return
 
 	ui.drawGrid(clientState.game.grid)
+
+	if clientState.uiState != .DISABLED {
+		ui.drawCellBorder(ui.pointedCell, .2, rl.WHITE)
+	}
 
 	for &player, pix in clientState.game.players {
 		for &unit in player.units {
@@ -312,6 +319,7 @@ processPackage :: proc(p: networking.Package, inLobby: bool) {
 
 			// check if there is "yours" session
 		case .UPDATE:
+			clientState.cameraControlsEnabled = true
 			// game update from server
 			clear(&clientState.orders)
 

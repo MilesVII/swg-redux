@@ -11,9 +11,12 @@ import "../utils"
 import "../shaded"
 
 windowSize := [2]i32 { 640, 480 }
+windowSizeF :: proc() -> [2]f32 {
+	return [2]f32 { f32(windowSize.x), f32(windowSize.y) }
+}
 
 camera := rl.Camera2D {
-	offset = rl.Vector2 {f32(windowSize.x) / 2, f32(windowSize.y) / 2},
+	offset = windowSizeF() / 2,
 	target = rl.Vector2 {0, 0},
 	rotation = 0.0,
 	zoom = 30.0,
@@ -46,18 +49,18 @@ initTextTextures :: proc() {
 
 	fontSize :: 10
 	spacing :: 1
-	imageMov := rl.ImageTextEx(font, "MOVE", fontSize, spacing, rl.BLACK)
-	imageAtk := rl.ImageTextEx(font, "ATACK", fontSize, spacing, rl.BLACK)
-	imageDig := rl.ImageTextEx(font, "DIG", fontSize, spacing, rl.BLACK)
-	imageBld := rl.ImageTextEx(font, "BUILD", fontSize, spacing, rl.BLACK)
-	imageClr := rl.ImageTextEx(font, "CLEAR", fontSize, spacing, rl.BLACK)
+	imageMov := rl.ImageTextEx(font, "MOVE", fontSize, spacing, rl.WHITE)
+	imageAtk := rl.ImageTextEx(font, "ATACK", fontSize, spacing, rl.WHITE)
+	imageDig := rl.ImageTextEx(font, "DIG", fontSize, spacing, rl.WHITE)
+	imageBld := rl.ImageTextEx(font, "BUILD", fontSize, spacing, rl.WHITE)
+	imageClr := rl.ImageTextEx(font, "CLEAR", fontSize, spacing, rl.WHITE)
 
-	imageTnk := rl.ImageTextEx(font, "TONK", fontSize, spacing, rl.BLACK)
-	imageGun := rl.ImageTextEx(font, "GUN", fontSize, spacing, rl.BLACK)
-	imageMcv := rl.ImageTextEx(font, "MCV", fontSize, spacing, rl.BLACK)
+	imageTnk := rl.ImageTextEx(font, "TONK", fontSize, spacing, rl.WHITE)
+	imageGun := rl.ImageTextEx(font, "GUN", fontSize, spacing, rl.WHITE)
+	imageMcv := rl.ImageTextEx(font, "MCV", fontSize, spacing, rl.WHITE)
 
-	imageSub := rl.ImageTextEx(font, "SUBMIT", fontSize, spacing, rl.BLACK)
-	imageAbt := rl.ImageTextEx(font, "ABORT", fontSize, spacing, rl.BLACK)
+	imageSub := rl.ImageTextEx(font, "SUBMIT", fontSize, spacing, rl.WHITE)
+	imageAbt := rl.ImageTextEx(font, "ABORT", fontSize, spacing, rl.WHITE)
 
 	UI_TEXT_MOV = rl.LoadTextureFromImage(imageMov)
 	UI_TEXT_ATK = rl.LoadTextureFromImage(imageAtk)
@@ -94,10 +97,13 @@ onResize :: proc() {
 	rtLoaded = true
 }
 
-updateIO :: proc() {
+updateIO :: proc(cameraLocked: bool) {
 	if rl.IsWindowResized() do onResize()
 	dt := rl.GetFrameTime()
 	pointer = rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
+	pointedCell = hex.worldToAxial(pointer)
+
+	if cameraLocked do return
 
 	if rl.IsKeyDown(.E) do camera.zoom *= 1.01
 	if rl.IsKeyDown(.Q) do camera.zoom /= 1.01
@@ -118,19 +124,26 @@ updateIO :: proc() {
 	keyboardDelta = rl.Vector2Normalize(keyboardDelta) * camera.zoom * -1 * .12
 
 	camera.offset += cameraDelta + keyboardDelta
-
-	pointedCell = hex.worldToAxial(pointer)
+	// camera.target = rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
 }
 
-draw :: proc(world: proc(), hud: proc(), pfx: proc(tex: rl.RenderTexture2D)) {
+draw :: proc(
+	world: proc(),
+	hud: proc(),
+	pfx: proc(tex: rl.RenderTexture2D),
+	background: Maybe(proc()) = nil
+) {
 	utils.cursorHoverBegin()
 	defer utils.cursorHoverEnd()
 
 	rl.BeginTextureMode(rt)
-		rl.ClearBackground(rl.RAYWHITE)
-
 		rl.BeginMode2D(camera)
+
+		back, backSet := background.?
+		if backSet do back()
+
 		world()
+
 		rl.EndMode2D()
 
 		hud()
@@ -167,10 +180,9 @@ drawGrid :: proc(grid: hex.Grid(hex.GridCell)) {
 			}
 		}
 	}
-	drawCellBorder(pointedCell, .2, rl.WHITE)
 }
 
-drawOutline :: proc(outline: []hex.Line, color: rl.Color = rl.BLACK) {
+drawOutline :: proc(outline: []hex.Line, color: rl.Color = rl.WHITE) {
 	for line in outline {
 		vx := line
 		rl.DrawTriangleFan(&vx[0], 4, color)
@@ -198,7 +210,7 @@ drawHexLine :: proc(
 	from: hex.Axial,
 	to: hex.Axial,
 	thickness: f32,
-	color: rl.Color = rl.BLACK,
+	color: rl.Color = rl.WHITE,
 	endStepback: f32 = .5
 ) {
 	f := hex.axialToWorld(from)
@@ -209,7 +221,7 @@ drawHexLine :: proc(
 	drawLine(f, t, thickness, color)
 }
 
-drawLine :: proc(from: rl.Vector2, to: rl.Vector2, thickness: f32, color: rl.Color = rl.BLACK, striped: ^shaded.StripedShader = nil) {
+drawLine :: proc(from: rl.Vector2, to: rl.Vector2, thickness: f32, color: rl.Color = rl.WHITE, striped: ^shaded.StripedShader = nil) {
 	ray := to - from
 	offv := rl.Vector2Normalize(ray) * thickness * .5
 	ninety : f32 = -utils.TAU * .25
@@ -230,7 +242,7 @@ drawLine :: proc(from: rl.Vector2, to: rl.Vector2, thickness: f32, color: rl.Col
 	rl.DrawTriangleFan(&vx[0], 4, color)
 }
 
-drawPath :: proc(path: hex.Path, thickness := f32(.4), color: rl.Color = rl.BLACK, striped: ^shaded.StripedShader = nil) {
+drawPath :: proc(path: hex.Path, thickness := f32(.4), color: rl.Color = rl.WHITE, striped: ^shaded.StripedShader = nil) {
 	for node, index in path {
 		if index != len(path) - 1 {
 			f, t: rl.Vector2
