@@ -70,6 +70,7 @@ ClientState :: struct {
 	status: ClientStatus,
 	uiState: UIState,
 	orders: OrderSet,
+	storedGunOrders: OrderSet,
 	myPix: int,
 	name: string,
 	explosions: [dynamic]Explosion,
@@ -82,6 +83,7 @@ clientState := ClientState {
 	status = .CONNECTING,
 	uiState = UIState.DISABLED,
 	orders = make(OrderSet),
+	storedGunOrders = make(OrderSet),
 	fragCounter = 0,
 	fragCounterTTS = 0
 }
@@ -356,6 +358,8 @@ processPackage :: proc(p: networking.Package, inLobby: bool) {
 promoteStateChange :: proc() {
 	deleteState(clientState.game)
 	clientState.game = clientUpdateBuffer.gameState
+
+	applyStoredGunOrders()
 }
 @(private="file")
 promoteStatusChange :: proc() {
@@ -385,6 +389,24 @@ clientSayOrders :: proc() {
 	}
 
 	networking.say(clientState.serverSocket, &header, encode(clientState.orders))
+	clear(&clientState.storedGunOrders)
+
+	for unitId in clientState.orders {
+		unit, found := findUnitById(clientState.game.players[clientState.myPix].units[:], unitId)
+		if found && unit.type == .GUN {
+			clientState.storedGunOrders[unitId] = clientState.orders[unitId]
+		}
+	}
+}
+
+@(private="file")
+applyStoredGunOrders :: proc () {
+	for unitId in clientState.storedGunOrders {
+		unit, found := findUnitById(clientState.game.players[clientState.myPix].units[:], unitId)
+		if found {
+			clientState.orders[unitId] = clientState.storedGunOrders[unitId]
+		}
+	}
 }
 
 @(private)
