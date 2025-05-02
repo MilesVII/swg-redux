@@ -107,7 +107,13 @@ updateIO :: proc(cameraLocked: bool) {
 
 	if rl.IsKeyDown(.E) do camera.zoom *= 1.01
 	if rl.IsKeyDown(.Q) do camera.zoom /= 1.01
-	camera.zoom *= 1.0 + rl.GetMouseWheelMove() * .04
+	wheel := rl.GetMouseWheelMove()
+	if wheel != 0 {
+		world := rl.GetScreenToWorld2D(rl.GetMousePosition(), camera);
+		camera.offset = rl.GetMousePosition();
+		camera.target = world;
+		camera.zoom *= 1.0 + wheel * .04
+	}
 	camera.zoom = rl.Clamp(camera.zoom, 5, 100)
 
 	cameraDelta := rl.Vector2 {0, 0}
@@ -124,7 +130,6 @@ updateIO :: proc(cameraLocked: bool) {
 	keyboardDelta = rl.Vector2Normalize(keyboardDelta) * camera.zoom * -1 * .12
 
 	camera.offset += cameraDelta + keyboardDelta
-	// camera.target = rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
 }
 
 draw :: proc(
