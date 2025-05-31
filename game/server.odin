@@ -7,6 +7,7 @@ import "core:net"
 import "core:os"
 import "core:thread"
 import synchan "core:sync/chan"
+import "../lib/back"
 
 import "hex"
 import "utils"
@@ -95,6 +96,13 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, lo
 
 	for {
 		for synchan.can_recv(networking.rx) {
+			track: back.Tracking_Allocator
+			back.tracking_allocator_init(&track, context.allocator)
+			defer back.tracking_allocator_destroy(&track)
+
+			context.allocator = back.tracking_allocator(&track)
+			defer back.tracking_allocator_print_results(&track)
+
 			data, ok := synchan.recv(networking.rx)
 			processPackage(data)
 		}
