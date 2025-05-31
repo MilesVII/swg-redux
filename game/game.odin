@@ -164,7 +164,6 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> (GameSta
 getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 	player := &state.players[playerIndex]
 	reducedState := cloneState(state^)
-	reducedState.grid.cells = slice.clone(state.grid.cells)
 	for &cell, cellIndex in reducedState.grid.cells {
 		if !cell.visible do continue
 
@@ -249,11 +248,11 @@ reduceExplosionsToVisible :: proc(reducedState: ^GameState, playerIx: int, explo
 }
 
 deleteState :: proc(state: GameState) {
-	delete(state.players)
 	for p in state.players {
 		delete(p.units)
 		delete(p.knownTerrain)
 	}
+	delete(state.players)
 	delete(state.grid.cells)
 }
 

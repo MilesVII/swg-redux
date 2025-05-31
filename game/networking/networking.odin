@@ -89,7 +89,7 @@ listenBlocking :: proc(channel: synchan.Chan(Package, .Send), socket: net.TCP_So
 	}
 }
 
-say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: []u8 = nil) {
+say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: []u8 = nil, freePayload: bool = true) {
 	header.payloadSize = u32(len(payload))
 	// bytes := transmute([^]u8)&payload
 	headerSlice := mem.slice_ptr(header, 1)
@@ -111,6 +111,7 @@ say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: []u8 = nil)
 	if header.payloadSize > 0 {
 		_, err2 := net.send_tcp(socket, payload)
 		if err2 != nil && verbose do fmt.println("no voice (payload): ", err2)
+		if freePayload do delete(payload)
 	}
 }
 
