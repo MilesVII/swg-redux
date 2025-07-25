@@ -45,6 +45,13 @@ Refer to `config.toml.example` for config details
 - [toml_parser](https://github.com/Up05/toml_parser)
 - Post effects shader by [@BitOfGold](https://www.shadertoy.com/view/3tVBWR)
 - VCR OSD Mono by [Riciery Leal aka mrmanet](https://www.dafont.com/vcr-osd-mono.font)
-- Unit kill sfx taken from War Thunder sound modding repo: [obj_complete.wav](https://github.com/GaijinEntertainment/fmod_studio_warthunder_for_modders/blob/master/Assets/gui/obj_complete.wav)
+
+Sounds from [(freesound.org)](https://freesound.org/), original posts can be found by id
+- 425728__moogy73__click01.wav
+- 538155__fupicat__switch.wav (unused)
+- 658594__javieralejp2__clic-alerta.wav
+- 683048__squirrel_404__click-tick.wav
+- 770201__yuugfr1a__modern-ui-click.wav
+- 770203__yuugfr1a__modern-ui-hover.wav
 
 fuck chess

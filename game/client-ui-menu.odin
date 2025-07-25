@@ -47,6 +47,7 @@ drawMain :: proc() {
 	menuNavigation(max(3, len(menuState.sessions) + 2 - 1))
 
 	if rl.IsKeyPressed(.ENTER) {
+		rl.PlaySound(menuSound)
 		switch menuState.index {
 			case 0:
 				// start requesting new game
@@ -95,6 +96,7 @@ drawNGRMenu :: proc() {
 	menuNavigation(4)
 
 	if rl.IsKeyPressed(.ENTER) {
+		rl.PlaySound(menuSound)
 		switch i := menuState.index; i {
 			case 0:
 				// go back
@@ -126,6 +128,8 @@ drawNGRMenu :: proc() {
 			if rite do menuState.ngr.playerCount += 1
 	}
 
+	if left || rite do rl.PlaySound(buttonSound)
+
 	menuState.ngr.mapRadius = clamp(menuState.ngr.mapRadius, 4, 64)
 	menuState.ngr.playerCount = clamp(menuState.ngr.playerCount, 2, 6)
 
@@ -140,8 +144,14 @@ drawNGRMenu :: proc() {
 menuNavigation :: proc(listLength: int) {
 	startIndex := menuState.index
 
-	if checkRepeatedInput(.UP, .W) do menuState.index -= 1
-	if checkRepeatedInput(.DOWN, .S) do menuState.index += 1
+	if checkRepeatedInput(.UP, .W) {
+		rl.PlaySound(buttonSound)
+		menuState.index -= 1
+	}
+	if checkRepeatedInput(.DOWN, .S) {
+		rl.PlaySound(buttonSound)
+		menuState.index += 1
+	}
 	menuState.index = wrapClamp(menuState.index, 0, listLength - 1)
 
 	menuState.animationOffset += f32(startIndex - menuState.index)

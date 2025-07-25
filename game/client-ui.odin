@@ -329,7 +329,7 @@ drawOrdersPreview :: proc() {
 }
 
 createOrder :: proc(unitId: int, order: Order) {
-	fmt.println(unitId)
+	rl.PlaySound(placeSound)
 	clientState.orders[unitId] = order
 	clientState.uiState = .FREE
 	selectedUnit = nil

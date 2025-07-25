@@ -102,6 +102,10 @@ progressShader: shaded.ProgressShader
 postfxShader: shaded.PostFXShader
 backgroundShader: shaded.BackgroundShader
 
+menuSound: rl.Sound
+buttonSound: rl.Sound
+placeSound: rl.Sound
+hitSound: rl.Sound
 fragSound: rl.Sound
 
 vcrFont: rl.Font
@@ -140,7 +144,12 @@ client :: proc(
 	backgroundShader = shaded.createBackgroundShader()
 
 	rl.InitAudioDevice()
-	fragSound = rl.LoadSound("assets/wt_obj.ogg")
+	menuSound =   rl.LoadSound("assets/770201__yuugfr1a__modern-ui-click.wav")
+	buttonSound = rl.LoadSound("assets/683048__squirrel_404__click-tick.wav")
+	placeSound =  rl.LoadSound("assets/770203__yuugfr1a__modern-ui-hover.wav")
+	hitSound =    rl.LoadSound("assets/425728__moogy73__click01.wav")
+	fragSound =   rl.LoadSound("assets/658594__javieralejp2__clic-alerta.wav")
+	ui.buttonSound = buttonSound
 
 	vcrFont = rl.LoadFontEx("assets/VCR_OSD_MONO.ttf", 16, nil, 0)
 
@@ -253,6 +262,7 @@ clientDrawWorld :: proc() {
 
 	if clientUpdateAnimationsPending {
 		for &bonk in clientState.explosions {
+			if bonk.elapsedTime == 0 do rl.PlaySound(hitSound)
 			bonk.elapsedTime += rl.GetFrameTime()
 			ui.drawExplosion(bonk.at, bonk.elapsedTime / (EXPLOSION_HATTRICK_S * 2.0), &sweepShader)
 			onGrid := hex.isWithinGrid(bonk.at, clientState.game.grid.radius)

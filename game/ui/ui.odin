@@ -43,6 +43,7 @@ DOTTED_WIDTH :: 8.0
 rt: rl.RenderTexture2D
 @(private)
 rtLoaded := false
+buttonSound: rl.Sound
 
 initTextTextures :: proc() {
 	font := rl.GetFontDefault() // rl.LoadFont("./assets/JetBrainsMono-Regular.ttf")
@@ -338,21 +339,22 @@ button :: proc(
 
 	if (!disabled) {
 		if (progressShader == nil) {
-			if rl.IsKeyPressed(hotkey) do action()
-			else if hovered && rl.IsMouseButtonPressed(.LEFT) do action()
+			if rl.IsKeyPressed(hotkey) || (hovered && rl.IsMouseButtonPressed(.LEFT)) {
+				rl.PlaySound(buttonSound)
+				action()
+			}
 		} else {
 			progress := rl.GetFrameTime() / shaded.PROGRESS_FILL_TIME_S
 			kDown := rl.IsKeyDown(hotkey)
 			mDown := rl.IsMouseButtonDown(.LEFT)
 			if !mDown && !kDown do progressShader.state.value = 0
 
-			if kDown && progressShader.state.value < 1.0 {
+			if (kDown && progressShader.state.value < 1.0) || (hovered && mDown && progressShader.state.value < 1.0) {
 				progressShader.state.value += progress
-				if progressShader.state.value >= 1.0 do action()
-			}
-			if hovered && mDown && progressShader.state.value < 1.0 {
-				progressShader.state.value += progress
-				if progressShader.state.value >= 1.0 do action()
+				if progressShader.state.value >= 1.0 {
+					rl.PlaySound(buttonSound)
+					action()
+				}
 			}
 		}
 	}
