@@ -5,6 +5,7 @@ import "core:unicode/utf8"
 import "core:strings"
 import "core:math"
 import "core:math/rand"
+import "core:fmt"
 
 TAU :: (rl.PI * 2)
 
@@ -81,4 +82,9 @@ FLICKER_PERIOD_S := f32(.800)
 flicker: f32
 updateFlicker :: proc() {
 	flicker = math.mod(flicker + rl.GetFrameTime() / FLICKER_PERIOD_S, f32(1.0))
+}
+
+loggingSilenced := false
+log :: proc(args: ..any) {
+	if !loggingSilenced do fmt.println(args)
 }

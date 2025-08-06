@@ -72,7 +72,10 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, lo
 		managed = managed
 	}
 	
-	if managed do networking.verbose = false
+	if managed {
+		utils.loggingSilenced = true
+		networking.verbose = false
+	}
 
 	networking.init()
 	receptionSocket = networking.openServerSocket(
@@ -88,16 +91,16 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, lo
 		session.game, err = createGame(playerCount, mapRadius, mapSeed)
 		if err == .OK do break
 		else if gameInitRetries == 0 || mapSeed != -1 {
+			utils.log("failed to create a game, aborting")
 			if session.managed do os.write(os.stdout, { LOBBY_SIGNAL_TERMINATE })
-			else do fmt.println("failed to create a game, aborting")
 			return
 		}
 		gameInitRetries -= 1
-		if !session.managed do fmt.println("failed to create a game, retrying")
+		utils.log("failed to create a game, retrying")
 	}
 
+	utils.log("session created, listening")
 	if session.managed do os.write(os.stdout, { LOBBY_SIGNAL_READY })
-	else do fmt.println("session created, listening")
 
 	startListeningForClients()
 
@@ -189,7 +192,7 @@ onJoin :: proc(player: string, socket: net.TCP_Socket) -> bool {
 	for &p, index in session.players {
 		id, exists := p.id.?
 		if exists && id == player {
-			if !session.managed do fmt.println(player, " reconnected")
+			utils.log(player, " reconnected")
 			// welcome back
 			p.socket = socket
 			p.online = true
@@ -209,10 +212,10 @@ onJoin :: proc(player: string, socket: net.TCP_Socket) -> bool {
 	}
 
 	if freeSlot == -1 {
-		if !session.managed do fmt.println("no slots available for player ", player)
+		utils.log("no slots available for player ", player)
 		return false
 	}
-	if !session.managed do fmt.println("assigned slot ", freeSlot)
+	utils.log("assigned slot ", freeSlot)
 
 	sendUpdate(socket, freeSlot)
 	return true
