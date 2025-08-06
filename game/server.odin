@@ -3,6 +3,7 @@ package game
 import rl "vendor:raylib"
 
 import "core:fmt"
+import "core:time"
 import "core:net"
 import "core:os"
 import "core:thread"
@@ -16,6 +17,8 @@ import "networking"
 receptionSocket : net.TCP_Socket
 @(private="file")
 session : Session
+
+NAME_PLACEHOLDER :: "NAMELESS"
 
 @(private="file")
 Player :: struct {
@@ -36,13 +39,15 @@ Session :: struct {
 TurnMessage :: struct {
 	activePlayer: int,
 	activeIsYou: bool,
+	currentPlayerBadge: string,
 	yourColor: rl.Color,
 	yourId: int
 }
 Update :: struct {
 	gameState: GameState,
 	meta: TurnMessage,
-	explosions: []ExplosionBufferEntry
+	explosions: []ExplosionBufferEntry,
+	gameFull: bool
 }
 
 ExplosionBufferEntry :: struct {
@@ -56,6 +61,9 @@ serverOrderBuffer: OrderSet
 
 @(private="file")
 explosionsBuffer: [dynamic]ExplosionBufferEntry
+
+@(private="file")
+SERVER_IDLE_SKIP := time.Millisecond * 100
 
 server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, local: bool, port: int, lobbyPort: int) {
 	session = Session {
@@ -98,6 +106,7 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, lo
 			data, ok := synchan.recv(networking.rx)
 			processPackage(data)
 		}
+		time.sleep(SERVER_IDLE_SKIP)
 	}
 }
 
@@ -180,6 +189,7 @@ onJoin :: proc(player: string, socket: net.TCP_Socket) -> bool {
 	for &p, index in session.players {
 		id, exists := p.id.?
 		if exists && id == player {
+			if !session.managed do fmt.println(player, " reconnected")
 			// welcome back
 			p.socket = socket
 			p.online = true
@@ -209,8 +219,13 @@ onJoin :: proc(player: string, socket: net.TCP_Socket) -> bool {
 }
 
 @(private="file")
+gameFull :: proc() -> bool {
+	for player in session.players do if !player.online do return false
+	return true
+}
+@(private="file")
 startGameIfFull :: proc() {
-	for player in session.players do if !player.online do return
+	if !gameFull() do return
 
 	if session.managed do os.write(os.stdout, { LOBBY_SIGNAL_FULL })
 	session.activePlayerIx = 0
@@ -225,6 +240,13 @@ broadcastUpdates :: proc() {
 }
 
 @(private="file")
+getActivePlayerName :: proc() -> string {
+	if session.activePlayerIx < 0 do return NAME_PLACEHOLDER
+	currentPlayer, cpe := session.players[session.activePlayerIx].id.?
+	return cpe ? currentPlayer : NAME_PLACEHOLDER
+}
+
+@(private="file")
 sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	header := networking.MessageHeader {
 		message = .UPDATE,
@@ -236,9 +258,11 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 			activePlayer = session.activePlayerIx,
 			activeIsYou = playerIndex == session.activePlayerIx,
 			yourColor = session.game.players[playerIndex].color,
-			yourId = playerIndex
+			yourId = playerIndex,
+			currentPlayerBadge = getActivePlayerName()
 		},
-		explosions = reduceExplosionsToVisible(&reducedState, playerIndex, explosionsBuffer[:])[:]
+		explosions = reduceExplosionsToVisible(&reducedState, playerIndex, explosionsBuffer[:])[:],
+		gameFull = gameFull()
 	}
 
 	networking.say(socket, &header, encode(update))

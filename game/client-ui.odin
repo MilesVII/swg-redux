@@ -133,6 +133,14 @@ clientDrawBackground :: proc() {
 
 @(private)
 clientDrawHUD :: proc() {
+	nameStatus :: proc() -> (cstring) {
+		badge := clientState.activePlayerName
+		if badge == NAME_PLACEHOLDER {
+			return "WAITING FOR OTHER PLAYERS"
+		} else {
+			return fmt.caprintf("PLAYER %s IS MAKING ORDERS", badge)
+		}
+	}
 	getStatusString :: proc() -> (cstring, rl.Color) {
 		switch clientState.status {
 			case .CONNECTING_L: return "CONNECTING TO LOBBY", rl.WHITE;
@@ -140,7 +148,7 @@ clientDrawHUD :: proc() {
 			case .CONNECTING:   return "CONNECTING TO GAME SERVER", rl.WHITE;
 			case .NOT_FULL:     return "WAITING FOR PLAYERS TO JOIN", rl.WHITE;
 			case .PLAYING:      return "YOUR TURN", rl.RED;
-			case .WAITING:      return "WAITING FOR OTHER PLAYERS", rl.WHITE;
+			case .WAITING:      return nameStatus(), rl.WHITE;
 			case .FINISH:       return "GAME OVER", rl.WHITE;
 		}
 		return "", rl.WHITE

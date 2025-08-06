@@ -2,6 +2,7 @@ package game
 
 import rl "vendor:raylib"
 
+import "core:time"
 import "core:fmt"
 import "core:net"
 import os "core:os/os2"
@@ -49,6 +50,9 @@ lobbyState: struct {
 	connectedClients: [dynamic]net.TCP_Socket
 }
 
+@(private="file")
+LOBBY_IDLE_SKIP := time.Millisecond * 100
+
 LOBBY_SIGNAL_READY := u8(0)
 LOBBY_SIGNAL_FULL := u8(1)
 LOBBY_SIGNAL_TERMINATE := u8(2)
@@ -95,6 +99,8 @@ lobby :: proc(portRange: [2]int, local: bool, port: int, authToken: [64]rune) {
 				}
 			}
 		}
+
+		time.sleep(LOBBY_IDLE_SKIP)
 	}
 }
 

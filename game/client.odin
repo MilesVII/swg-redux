@@ -67,6 +67,7 @@ Explosion :: struct {
 ClientState :: struct {
 	game: GameState,
 	serverSocket: net.TCP_Socket,
+	activePlayerName: string,
 	status: ClientStatus,
 	uiState: UIState,
 	orders: OrderSet,
@@ -329,8 +330,9 @@ processPackage :: proc(p: networking.Package, inLobby: bool) {
 
 			// check if there is "yours" session
 		case .UPDATE:
-			clientState.cameraControlsEnabled = true
 			// game update from server
+			rl.PlaySound(menuSound)
+			clientState.cameraControlsEnabled = true
 			clear(&clientState.orders)
 
 			if clientUpdateAnimationsPending {
@@ -342,6 +344,7 @@ processPackage :: proc(p: networking.Package, inLobby: bool) {
 
 			decode(p.payload, &clientUpdateBuffer)
 			clientState.myPix = clientUpdateBuffer.meta.yourId
+			clientState.activePlayerName = clientUpdateBuffer.meta.currentPlayerBadge
 			promoteStatusChange()
 
 			if clientFirstUpdate {
@@ -381,7 +384,11 @@ promoteStateChange :: proc() {
 }
 @(private="file")
 promoteStatusChange :: proc() {
-	clientState.status = clientUpdateBuffer.meta.activeIsYou ? .PLAYING : .WAITING
+	if clientUpdateBuffer.gameFull {
+		clientState.status = clientUpdateBuffer.meta.activeIsYou ? .PLAYING : .WAITING
+	} else {
+		clientState.status = .NOT_FULL
+	}
 	if clientUpdateBuffer.meta.activeIsYou do clientState.uiState = .FREE
 }
 

@@ -2,6 +2,7 @@ package utils
 
 import rl "vendor:raylib"
 import "core:unicode/utf8"
+import "core:strings"
 import "core:math"
 import "core:math/rand"
 
@@ -58,7 +59,8 @@ stringToBadge :: proc(name: string) -> Badge {
 
 badgeToString :: proc(badge: Badge) -> string {
 	badge := badge
-	return utf8.runes_to_string(badge[:])
+	cutset := [1]rune { }
+	return strings.trim(utf8.runes_to_string(badge[:]), utf8.runes_to_string(cutset[:]))
 }
 
 swap :: proc(a: ^$T, b:^T) {
