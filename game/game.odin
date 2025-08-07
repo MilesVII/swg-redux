@@ -33,7 +33,7 @@ GameGrid :: hex.Grid(hex.GridCell)
 GameUnitType :: enum { TONK, GUN, MCV }
 VISION := [GameUnitType] int { .TONK = 4, .GUN = 2, .MCV = 7 }
 MOVING := [GameUnitType] int { .TONK = 4, .GUN = 0, .MCV = 5 }
-ARANGE := [GameUnitType] int { .TONK = 5, .GUN = 10, .MCV = 0 }
+ARANGE := [GameUnitType] int { .TONK = 5, .GUN = 8, .MCV = 0 }
 INDIREKT_BARRAGE_SIZE := 3
 
 GameUnit :: struct {
