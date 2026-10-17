@@ -11,8 +11,19 @@ import "utils"
 import "hex"
 import "shaded"
 
+NO_SELECTION :: -1
+
+// id of one of your units; look it up every time, the state it points into gets replaced
 @(private)
-selectedUnit : ^GameUnit = nil
+selectedUnitId := NO_SELECTION
+
+@(private)
+getSelectedUnit :: proc() -> ^GameUnit {
+	if selectedUnitId == NO_SELECTION do return nil
+	if clientState.myPix < 0 || clientState.myPix >= len(clientState.game.players) do return nil
+	unit, found := findUnitById(clientState.game.players[clientState.myPix].units[:], selectedUnitId)
+	return found ? unit : nil
+}
 @(private)
 selectedBuildingUnit : GameUnitType
 
@@ -56,7 +67,7 @@ BUTTON_BLD := ui.Button {
 BUTTON_CLR := ui.Button {
 	action = proc() {
 		postponeGenericAction(proc() {
-			delete_key(&clientState.orders, selectedUnit.id)
+			delete_key(&clientState.orders, selectedUnitId)
 			clientState.uiState = .FREE
 		})
 	},
@@ -138,18 +149,26 @@ clientDrawHUD :: proc() {
 		if badge == NAME_PLACEHOLDER {
 			return "WAITING FOR OTHER PLAYERS"
 		} else {
-			return fmt.caprintf("PLAYER %s IS MAKING ORDERS", badge)
+			return fmt.ctprintf("PLAYER %s IS MAKING ORDERS", badge)
 		}
+	}
+	finishStatus :: proc() -> cstring {
+		if len(clientState.winnerName) == 0 do return "GAME OVER, NOBODY SURVIVED"
+		myBadge := utils.badgeToString(utils.stringToBadge(clientState.name), context.temp_allocator)
+		if clientState.winnerName == myBadge do return "GAME OVER, YOU WON"
+		return fmt.ctprintf("GAME OVER, PLAYER %s WON", clientState.winnerName)
 	}
 	getStatusString :: proc() -> (cstring, rl.Color) {
 		switch clientState.status {
-			case .CONNECTING_L: return "CONNECTING TO LOBBY", rl.WHITE;
-			case .LOBBY:        return "", rl.WHITE;
-			case .CONNECTING:   return "CONNECTING TO GAME SERVER", rl.WHITE;
-			case .NOT_FULL:     return "WAITING FOR PLAYERS TO JOIN", rl.WHITE;
-			case .PLAYING:      return "YOUR TURN", rl.RED;
-			case .WAITING:      return nameStatus(), rl.WHITE;
-			case .FINISH:       return "GAME OVER", rl.WHITE;
+			case .CONNECTING_L: return "CONNECTING TO LOBBY", rl.WHITE
+			case .LOBBY:        return "", rl.WHITE
+			case .CONNECTING:   return "CONNECTING TO GAME SERVER", rl.WHITE
+			case .NOT_FULL:     return "WAITING FOR PLAYERS TO JOIN", rl.WHITE
+			case .RESOLVING:    return "EXECUTING ORDERS", rl.WHITE
+			case .PLAYING:      return "YOUR TURN", rl.RED
+			case .WAITING:      return nameStatus(), rl.WHITE
+			case .FINISH:       return finishStatus(), rl.WHITE
+			case .DISCONNECTED: return "DISCONNECTED", rl.RED
 		}
 		return "", rl.WHITE
 	}
@@ -168,6 +187,14 @@ clientDrawHUD :: proc() {
 		UI_CORNER_PAD + { 0, UI_SPACING + FONT_SIZE },
 		FONT_SIZE, FONT_SPACING, rl.RED
 	)
+	if len(clientState.notice) > 0 {
+		rl.DrawTextEx(
+			vcrFont,
+			strings.clone_to_cstring(clientState.notice, context.temp_allocator),
+			UI_CORNER_PAD + { 0, (UI_SPACING + FONT_SIZE) * 2 },
+			FONT_SIZE, FONT_SPACING, rl.YELLOW
+		)
+	}
 
 	if clientState.status == .LOBBY {
 		drawMenu()
@@ -176,7 +203,7 @@ clientDrawHUD :: proc() {
 	drawFragList()
 
 	if clientState.status != .PLAYING {
-		selectedUnit = nil
+		selectedUnitId = NO_SELECTION
 		return
 	}
 
@@ -184,12 +211,15 @@ clientDrawHUD :: proc() {
 	drawOrders(clientState.orders)
 	rl.EndMode2D()
 
-	if selectedUnit != nil do drawOrdersPreview()
+	if getSelectedUnit() != nil do drawOrdersPreview()
 
 	drawTurnControl()
 }
 
 drawOrdersPreview :: proc() {
+	selectedUnit := getSelectedUnit()
+	if selectedUnit == nil do return
+
 	switch clientState.uiState {
 		case .DISABLED:
 		case .FREE:
@@ -232,9 +262,10 @@ drawOrdersPreview :: proc() {
 			allowedCells := hex.findWalkableOutline(
 				clientState.game.grid,
 				selectedUnit.position,
-				MOVING[selectedUnit.type]
+				MOVING[selectedUnit.type],
+				context.temp_allocator
 			)
-			ui.drawOutline(hex.outline(allowedCells), rl.WHITE)
+			ui.drawOutline(hex.outline(allowedCells, allocator = context.temp_allocator), rl.WHITE)
 			movingAllowed :=
 				ui.pointedCell != selectedUnit.position &&
 				utils.includes(allowedCells, &ui.pointedCell) &&
@@ -243,7 +274,7 @@ drawOrdersPreview :: proc() {
 			
 			if movingAllowed {
 				utils.setCursorHover(true)
-				path, _found := hex.findPath(clientState.game.grid, selectedUnit.position, ui.pointedCell)
+				path, _ := hex.findPath(clientState.game.grid, selectedUnit.position, ui.pointedCell, context.temp_allocator)
 				if len(path) > 2 do ui.drawPath(path, .12, rl.BLUE, &stripeShader)
 				ui.drawCellBorder(
 					ui.pointedCell,
@@ -313,7 +344,7 @@ drawOrdersPreview :: proc() {
 
 				if indirekt {
 					area := hex.nbs(ui.pointedCell)
-					lines := hex.outline(area[:], .2)
+					lines := hex.outline(area[:], .2, context.temp_allocator)
 					ui.drawOutline(lines, rl.RED)
 				} else {
 					ui.drawCellBorder(
@@ -340,12 +371,12 @@ createOrder :: proc(unitId: int, order: Order) {
 	rl.PlaySound(placeSound)
 	clientState.orders[unitId] = order
 	clientState.uiState = .FREE
-	selectedUnit = nil
+	selectedUnitId = NO_SELECTION
 }
 
 drawOrders :: proc(orders: OrderSet) {
 	for unitId, order in orders {
-		if selectedUnit != nil && selectedUnit.id == unitId && clientState.uiState != .FREE do continue
+		if selectedUnitId == unitId && clientState.uiState != .FREE do continue
 		unit, ok := findUnitById(clientState.game.players[clientState.myPix].units[:], unitId)
 		if !ok do continue
 		
@@ -377,10 +408,10 @@ drawOrders :: proc(orders: OrderSet) {
 					.12, rl.RED, 1.5
 				)
 				area := hex.nbs(order.target)
-				lines := hex.outline(area[:], .2)
+				lines := hex.outline(area[:], .2, context.temp_allocator)
 				ui.drawOutline(lines, rl.RED)
 			case .MOVE:
-				path, _found := hex.findPath(clientState.game.grid, unit.position, order.target)
+				path, _ := hex.findPath(clientState.game.grid, unit.position, order.target, context.temp_allocator)
 				if len(path) > 2 do ui.drawPath(path, .12, rl.BLUE, &stripeShader)
 				ui.drawCellBorder(
 					order.target,
@@ -392,6 +423,9 @@ drawOrders :: proc(orders: OrderSet) {
 
 @(private="file")
 drawOrdersControl :: proc() {
+	selectedUnit := getSelectedUnit()
+	if selectedUnit == nil do return
+
 	buttonSize := f32(32.0)
 	windowSize := ui.windowSizeF()
 	origin := rl.Vector2 {
@@ -471,7 +505,7 @@ drawFragList :: proc() {
 		xfactor := clientState.fragCounter - i
 
 		alphaTTSFactor := clientState.fragCounterTTS > 0 ? clientState.fragCounterTTS / FRAG_COUNTER_DISAPPEAR_S : f32(1)
-		alpha := clamp(f32(5 - i) / 5, 0, 1) * alphaTTSFactor;
+		alpha := clamp(f32(5 - i) / 5, 0, 1) * alphaTTSFactor
 		color := rl.Color { 0, 0, 0, u8(math.round(255 * alpha)) }
 
 		padding := UI_CORNER_PAD + { 0, 0 + FONT_SIZE * (f32(i) + 1) }
@@ -505,7 +539,7 @@ drawTurnControl :: proc() {
 		.ENTER,
 		progressShader=&progressShader
 	)
-	if selectedUnit != nil {
+	if getSelectedUnit() != nil {
 		ui.button(
 			orgn + (hex.BASIS_Y * 2 * buttonSize),
 			buttonSize,
@@ -516,7 +550,7 @@ drawTurnControl :: proc() {
 			},
 			proc() {
 				postponeGenericAction(proc() {
-					selectedUnit = nil
+					selectedUnitId = NO_SELECTION
 					clientState.uiState = .FREE
 				})
 			},

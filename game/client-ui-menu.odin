@@ -44,10 +44,12 @@ drawMenu :: proc() {
 
 @(private="file")
 drawMain :: proc() {
-	menuNavigation(max(3, len(menuState.sessions) + 2 - 1))
+	// two fixed items, then sessions or the placeholder
+	menuNavigation(2 + max(1, len(menuState.sessions)))
 
 	if rl.IsKeyPressed(.ENTER) {
 		rl.PlaySound(menuSound)
+		setNotice("")
 		switch menuState.index {
 			case 0:
 				// start requesting new game
@@ -62,13 +64,14 @@ drawMain :: proc() {
 					&message
 				)
 			case:
-				if (menuState.index <= 1 || len(menuState.sessions) == 0) do break
+				sessionIndex := menuState.index - 2
+				if sessionIndex < 0 || sessionIndex >= len(menuState.sessions) do break
+				port := menuState.sessions[sessionIndex].port
 				clientState.status = .CONNECTING
+				// the lobby socket's DISCONNECTED must not count as losing the game server
+				clientState.connection = 0
 				networking.hang(clientState.serverSocket)
-				connect(
-					menuState.lobbyAddress,
-					menuState.sessions[menuState.index - 2].port
-				)
+				connect(menuState.lobbyAddress, port)
 		}
 	}
 
@@ -76,11 +79,13 @@ drawMain :: proc() {
 	drawItemButton("REFRESH SESSION LIST", 1)
 	for session, i in menuState.sessions {
 		drawItemButton(
-			fmt.aprintf(
-				"R%d P%d %s",
+			fmt.tprintf(
+				"R%d P%d %s%s%s",
 				session.config.mapRadius,
 				session.config.playerCount,
-				session.config.name
+				session.config.name,
+				session.yours ? " [YOURS]" : "",
+				session.full ? " [IN PROGRESS]" : ""
 			),
 			i + 2
 		)
@@ -97,12 +102,14 @@ drawNGRMenu :: proc() {
 
 	if rl.IsKeyPressed(.ENTER) {
 		rl.PlaySound(menuSound)
-		switch i := menuState.index; i {
+		switch menuState.index {
 			case 0:
 				// go back
 				menuState.status = .MAIN
-			case i == 1 && !menuState.ngrSent:
-				// request session list
+			case 1:
+				if menuState.ngrSent do break
+				// request a new game
+				setNotice("")
 				message := networking.MessageHeader {
 					message = .ORDERS,
 				}
@@ -130,13 +137,13 @@ drawNGRMenu :: proc() {
 
 	if left || rite do rl.PlaySound(buttonSound)
 
-	menuState.ngr.mapRadius = clamp(menuState.ngr.mapRadius, 4, 64)
-	menuState.ngr.playerCount = clamp(menuState.ngr.playerCount, 2, 6)
+	menuState.ngr.mapRadius = clamp(menuState.ngr.mapRadius, NGR_RADIUS_RANGE[0], NGR_RADIUS_RANGE[1])
+	menuState.ngr.playerCount = clamp(menuState.ngr.playerCount, NGR_PLAYERS_RANGE[0], NGR_PLAYERS_RANGE[1])
 
 	drawItemButton("< BACK", 0)
 	drawItemButton("REQUEST NEW GAME", 1)
-	drawItemButton(fmt.aprintf("MAP RADIUS: %d TILES", menuState.ngr.mapRadius), 2)
-	drawItemButton(fmt.aprintf("PLAYERS: %d", menuState.ngr.playerCount), 3)
+	drawItemButton(fmt.tprintf("MAP RADIUS: %d TILES", menuState.ngr.mapRadius), 2)
+	drawItemButton(fmt.tprintf("PLAYERS: %d", menuState.ngr.playerCount), 3)
 }
 
 
@@ -185,7 +192,7 @@ drawItemButton :: proc(caption: string, offset: int, color := rl.WHITE) {
 	}
 	rl.DrawTextEx(
 		vcrFont,
-		strings.unsafe_string_to_cstring(caption),
+		strings.clone_to_cstring(caption, context.temp_allocator),
 		origin + { bulletSpace + UI_SPACING, vOffset },
 		FONT_SIZE,
 		FONT_SPACING,
@@ -196,7 +203,7 @@ drawItemButton :: proc(caption: string, offset: int, color := rl.WHITE) {
 @(private="file")
 drawSelectorBullet :: proc(origin: [2]f32, radius: f32) {
 	ray := rl.Vector2 { radius, 0 }
-	v0 := origin + ray;
+	v0 := origin + ray
 	v1 := origin + rl.Vector2Rotate(ray, utils.TAU * .33)
 	v2 := origin + rl.Vector2Rotate(ray, utils.TAU * .66)
 	rl.DrawTriangle(v2, v1, v0, rl.WHITE)
@@ -220,4 +227,10 @@ checkRepeatedInput :: proc(keys: ..rl.KeyboardKey) -> bool {
 		if rl.IsKeyPressed(key) || rl.IsKeyPressedRepeat(key) do return true
 	}
 	return false
+}
+
+// session names are heap strings owned by the list
+clearSessions :: proc() {
+	for session in menuState.sessions do delete(session.config.name)
+	clear(&menuState.sessions)
 }

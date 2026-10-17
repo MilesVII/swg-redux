@@ -2,12 +2,8 @@ package game
 
 import rl "vendor:raylib"
 
-import "core:fmt"
 import "core:net"
-import "core:thread"
-import "core:unicode/utf8"
-import "core:crypto"
-import "core:math"
+import "core:strings"
 import synchan "core:sync/chan"
 
 import "hex"
@@ -31,8 +27,11 @@ ClientStatus :: enum {
 	CONNECTING,
 	NOT_FULL,
 	WAITING,
+	// last turn's explosions are still playing, orders are locked
+	RESOLVING,
 	PLAYING,
-	FINISH
+	FINISH,
+	DISCONNECTED
 }
 
 UIState :: enum {
@@ -67,7 +66,12 @@ Explosion :: struct {
 ClientState :: struct {
 	game: GameState,
 	serverSocket: net.TCP_Socket,
+	// packages from older sockets (e.g. the lobby after joining a game) are ignored
+	connection: int,
 	activePlayerName: string,
+	winnerName: string,
+	// message from lobby or server, shown in the HUD
+	notice: string,
 	status: ClientStatus,
 	uiState: UIState,
 	orders: OrderSet,
@@ -89,6 +93,7 @@ clientState := ClientState {
 	fragCounter = 0,
 	fragCounterTTS = 0
 }
+// latest update from the server, applied once its explosions finish playing
 @(private)
 clientUpdateBuffer: Update
 @(private)
@@ -168,7 +173,7 @@ client :: proc(
 	for !rl.WindowShouldClose() {
 		for synchan.can_recv(networking.rx) {
 			data, ok := synchan.recv(networking.rx)
-			processPackage(data, clientState.status == .LOBBY)
+			if ok do processPackage(data)
 		}
 		utils.updateFlicker()
 
@@ -185,6 +190,8 @@ client :: proc(
 				postfxEnabled = !postfxEnabled
 			}
 		}
+
+		free_all(context.temp_allocator)
 	}
 }
 
@@ -254,10 +261,10 @@ clientDrawWorld :: proc() {
 			shouldSelect :=
 				unitHovered &&
 				clientState.uiState == .FREE &&
-				(selectedUnit == nil || selectedUnit.id != unit.id) &&
+				selectedUnitId != unit.id &&
 				rl.IsMouseButtonPressed(.LEFT)
 
-			if shouldSelect do postponeClick(SelectAction(&unit))
+			if shouldSelect do postponeClick(SelectAction(unit.id))
 		}
 	}
 
@@ -294,115 +301,171 @@ clientDrawWorld :: proc() {
 			}
 		}
 		if len(clientState.explosions) == 0 {
-			promoteStateChange()
+			applyBufferedUpdate()
 			clientUpdateAnimationsPending = false
 		}
 	}
 }
 
 @(private)
-connect :: proc(to: net.Address, port: int) {
-	clientState.serverSocket = networking.dial(to, port)
-	startListening()
+connect :: proc(to: net.Address, port: int) -> bool {
+	socket, ok := networking.dial(to, port)
+	if !ok {
+		clientState.status = .DISCONNECTED
+		setNotice("CAN'T REACH GAME SERVER")
+		return false
+	}
+	clientState.serverSocket = socket
+	clientState.connection = networking.listen(socket)
 
 	header := networking.MessageHeader {
 		message = .JOIN,
 		me = utils.stringToBadge(clientState.name)
 	}
 	networking.say(clientState.serverSocket, &header)
+	return true
 }
 
 @(private="file")
 connectToLobby :: proc(to: net.Address, port: int) {
-	clientState.serverSocket = networking.dial(to, port)
-	startListening()
+	socket, ok := networking.dial(to, port)
+	if !ok {
+		clientState.status = .DISCONNECTED
+		setNotice("CAN'T REACH LOBBY")
+		return
+	}
+	clientState.serverSocket = socket
+	clientState.connection = networking.listen(socket)
+}
+
+// takes ownership of a heap string, copies literals
+@(private)
+setNotice :: proc(notice: string, owned := false) {
+	delete(clientState.notice)
+	clientState.notice = owned ? notice : strings.clone(notice)
 }
 
 @(private="file")
-processPackage :: proc(p: networking.Package, inLobby: bool) {
+processPackage :: proc(p: networking.Package) {
+	defer delete(p.payload)
+	if p.connection != clientState.connection do return
+
 	switch p.header.message {
+		case .CONNECTED:
+		case .DISCONNECTED:
+			networking.hang(p.socket)
+			clientState.status = .DISCONNECTED
+			setNotice("CONNECTION LOST")
 		case .GENERAL:
+			// notice from lobby or server
+			notice: string
+			if decode(p.payload, &notice) do setNotice(notice, owned = true)
+			// lobby only sends notices when a game request failed
+			if clientState.status == .LOBBY do menuState.ngrSent = false
 		case .JOIN:
 			// lobby offers session list
+			if clientState.status != .CONNECTING_L && clientState.status != .LOBBY do break
 			clientState.status = .LOBBY
-			clear(&menuState.sessions)
-			decode(p.payload, &menuState.sessions)
-
-			// check if there is "yours" session
+			clearSessions()
+			if !decode(p.payload, &menuState.sessions) do clearSessions()
 		case .UPDATE:
 			// game update from server
-			rl.PlaySound(menuSound)
-			clientState.cameraControlsEnabled = true
-			clear(&clientState.orders)
-
-			if clientUpdateAnimationsPending {
-				promoteStateChange()
-				clientUpdateAnimationsPending = false
-				clientState.fragCounter = 0
-				clientState.fragCounterTTS = 0
-			}
-
-			decode(p.payload, &clientUpdateBuffer)
-			clientState.myPix = clientUpdateBuffer.meta.yourId
-			clientState.activePlayerName = clientUpdateBuffer.meta.currentPlayerBadge
-			promoteStatusChange()
-
-			if clientFirstUpdate {
-				promoteStateChange()
-				spawn := clientState.game.players[clientState.myPix].units[0].position
-				ui.camera.target = hex.axialToWorld(spawn)
-
-				clientFirstUpdate = false
-			} else {
-				if len(clientUpdateBuffer.explosions) > 0 {
-					clientUpdateAnimationsPending = true
-				} else do promoteStateChange()
-			}
-
-			for bonk in clientUpdateBuffer.explosions {
-				append(
-					&clientState.explosions,
-					Explosion {
-						at = bonk.position,
-						lethal = bonk.lethal,
-						highlight = bonk.pix == 1,
-						elapsedTime = 0,
-						bonked = false
-					}
-				)
-			}
+			onUpdate(p.payload)
 		case .ORDERS: // ignored
 	}
 }
 
 @(private="file")
-promoteStateChange :: proc() {
+onUpdate :: proc(payload: []u8) {
+	// finish whatever the previous update was still animating,
+	// its explosions must not replay against the new state
+	if clientUpdateAnimationsPending {
+		clear(&clientState.explosions)
+		applyBufferedUpdate()
+		clientUpdateAnimationsPending = false
+		clientState.fragCounter = 0
+		clientState.fragCounterTTS = 0
+	}
+
+	// everything owned by the buffer was handed over by applyBufferedUpdate
+	clientUpdateBuffer = {}
+	if !decode(payload, &clientUpdateBuffer) {
+		deleteState(clientUpdateBuffer.gameState)
+		clientUpdateBuffer = {}
+		return
+	}
+	defer {
+		delete(clientUpdateBuffer.explosions)
+		clientUpdateBuffer.explosions = nil
+	}
+
+	rl.PlaySound(menuSound)
+	clientState.cameraControlsEnabled = true
+	clear(&clientState.orders)
+	setNotice("")
+	clientState.myPix = clientUpdateBuffer.meta.yourId
+
+	if clientFirstUpdate {
+		applyBufferedUpdate()
+		if clientState.myPix >= 0 && clientState.myPix < len(clientState.game.players) {
+			units := clientState.game.players[clientState.myPix].units
+			if len(units) > 0 do ui.camera.target = hex.axialToWorld(units[0].position)
+		}
+
+		clientFirstUpdate = false
+	} else if len(clientUpdateBuffer.explosions) > 0 {
+		// keep orders locked until the explosions land and the new state is applied
+		clientUpdateAnimationsPending = true
+		clientState.status = .RESOLVING
+	} else {
+		applyBufferedUpdate()
+	}
+
+	for bonk in clientUpdateBuffer.explosions {
+		append(
+			&clientState.explosions,
+			Explosion {
+				at = bonk.position,
+				lethal = bonk.lethal,
+				highlight = bonk.pix == 1,
+				elapsedTime = 0,
+				bonked = false
+			}
+		)
+	}
+}
+
+// moves state and captions out of the buffer and updates the status
+@(private="file")
+applyBufferedUpdate :: proc() {
 	deleteState(clientState.game)
 	clientState.game = clientUpdateBuffer.gameState
+	clientUpdateBuffer.gameState = {}
+
+	delete(clientState.activePlayerName)
+	clientState.activePlayerName = clientUpdateBuffer.meta.currentPlayerBadge
+	clientUpdateBuffer.meta.currentPlayerBadge = ""
+
+	delete(clientState.winnerName)
+	clientState.winnerName = clientUpdateBuffer.winnerBadge
+	clientUpdateBuffer.winnerBadge = ""
 
 	applyStoredGunOrders()
+	promoteStatusChange()
 }
+
 @(private="file")
 promoteStatusChange :: proc() {
-	if clientUpdateBuffer.gameFull {
-		clientState.status = clientUpdateBuffer.meta.activeIsYou ? .PLAYING : .WAITING
-	} else {
-		clientState.status = .NOT_FULL
-	}
-	if clientUpdateBuffer.meta.activeIsYou do clientState.uiState = .FREE
-}
-
-@(private="file")
-startListening :: proc() {
-	listener :: proc(t: ^thread.Thread) {
-		networking.listenBlocking(networking.tx, clientState.serverSocket)
-	}
-
-	t := thread.create(listener)
-	if t != nil {
-		t.init_context = context
-		t.user_index = 0
-		thread.start(t)
+	switch {
+		case clientUpdateBuffer.gameOver:
+			clientState.status = .FINISH
+		case !clientUpdateBuffer.gameStarted:
+			clientState.status = .NOT_FULL
+		case clientUpdateBuffer.meta.activeIsYou:
+			clientState.status = .PLAYING
+			clientState.uiState = .FREE
+		case:
+			clientState.status = .WAITING
 	}
 }
 
@@ -426,8 +489,9 @@ clientSayOrders :: proc() {
 
 @(private="file")
 applyStoredGunOrders :: proc () {
+	if clientState.myPix < 0 || clientState.myPix >= len(clientState.game.players) do return
 	for unitId in clientState.storedGunOrders {
-		unit, found := findUnitById(clientState.game.players[clientState.myPix].units[:], unitId)
+		_, found := findUnitById(clientState.game.players[clientState.myPix].units[:], unitId)
 		if found {
 			clientState.orders[unitId] = clientState.storedGunOrders[unitId]
 		}

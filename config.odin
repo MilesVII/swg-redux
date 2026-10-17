@@ -8,14 +8,13 @@ import "core:strings"
 import "core:strconv"
 import "core:encoding/hex"
 import "core:crypto/hash"
-import "core:unicode/utf8"
 
 import "lib/toml"
 
 Mode :: enum { client, server, lobby, debug }
 
 Options :: struct {
-	mode: Mode,
+	mode: string,
 	name: string,
 	managed: bool,
 	players: int,
@@ -90,14 +89,18 @@ config :: proc() -> Config {
 		fmt.println("failed to parse cli parameters: ", cliErr)
 	}
 
-	if options.mode != nil do config.common.mode = options.mode
+	if len(options.mode) > 0 {
+		mode, modeOk := modeStringToMode(options.mode)
+		if modeOk do config.common.mode = mode
+		else do fmt.println("unknown mode:", options.mode)
+	}
 	if len(options.name) > 0 do config.client.name = options.name
+	if options.port != 0 do config.common.port = options.port
 	if config.common.mode == .server && options.managed {
 		config.server.managed = true
 		config.server.players = options.players
 		config.server.radius = options.radius
 		config.server.seed = options.seed
-		config.common.port = options.port
 	}
 
 	return config
@@ -118,7 +121,11 @@ readFileConfig :: proc(filename: string, config: ^Config) {
 		if localFound do config.common.local = local
 
 		mode, modeFound := toml.get(string, commonTable, "mode")
-		if modeFound do config.common.mode = modeStringToMode(mode)
+		if modeFound {
+			parsed, modeOk := modeStringToMode(mode)
+			if modeOk do config.common.mode = parsed
+			else do fmt.println("unknown mode in config:", mode)
+		}
 
 		lobbyPort, lobbyPortFound := toml.get(i64, commonTable, "lobby_port")
 		if lobbyPortFound do config.common.lobbyPort = int(lobbyPort)
@@ -180,19 +187,20 @@ readFileConfig :: proc(filename: string, config: ^Config) {
 }
 
 @(private="file")
-modeStringToMode :: proc(mode: string) -> Mode {
+modeStringToMode :: proc(mode: string) -> (Mode, bool) {
 	switch mode {
-		case "client": return .client
-		case "server": return .server
-		case "lobby": return .lobby
-		case "debug": return .debug
+		case "client": return .client, true
+		case "server": return .server, true
+		case "lobby": return .lobby, true
+		case "debug": return .debug, true
 	}
-	return .client
+	return .client, false
 }
 
 @(private="file")
 parsePortRange :: proc(range: string) -> (pair: [2]int, ok: bool) {
 	values := strings.split(range, "-")
+	defer delete(values)
 	if len(values) < 2 do return { 0, 0 }, false
 
 	v0, ok0 := strconv.parse_int(values[0], 10)
@@ -203,14 +211,16 @@ parsePortRange :: proc(range: string) -> (pair: [2]int, ok: bool) {
 
 @(private="file")
 hashToken :: proc(raw: string) -> AUTH_TOKEN {
-	hashsum := transmute(string)hex.encode(hash.hash_string(.SHA256, raw))
-	return stringToHash(hashsum)
+	digest: [32]u8
+	hash.hash_string_to_buffer(.SHA256, raw, digest[:])
+	hashsum := hex.encode(digest[:])
+	defer delete(hashsum)
+	return stringToHash(string(hashsum))
 }
 
 @(private="file")
 stringToHash :: proc(raw: string) -> AUTH_TOKEN {
 	r : AUTH_TOKEN
-	runes := utf8.string_to_runes(raw)
 	for c, i in raw {
 		if i >= TOKEN_LENGTH do break
 		r[i] = c

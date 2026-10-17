@@ -5,7 +5,8 @@ OrderAction :: struct {
 	unitId: int,
 	order: Order
 }
-SelectAction :: ^GameUnit
+// a unit id, pointers into unit arrays die whenever the state changes
+SelectAction :: distinct int
 
 ClickAction :: union {
 	GenericAction,
@@ -33,7 +34,7 @@ flushClickQueue :: proc() {
 			createOrder(action.unitId, action.order)
 		case SelectAction:
 			#assert(type_of(action) == SelectAction)
-			selectedUnit = action
+			selectedUnitId = int(action)
 	}
 
 	clickQueue = nil

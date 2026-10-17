@@ -1,7 +1,5 @@
 package hex
 
-import "core:fmt"
-
 Area :: [dynamic]Axial
 Path :: []Axial
 
@@ -11,17 +9,22 @@ markWalkableAreas :: proc(grid: Grid(GridCell)) {
 
 	areas : [dynamic]Area
 	shockwave : [dynamic]Axial
+	defer {
+		for area in areas do delete(area)
+		delete(areas)
+		delete(shockwave)
+	}
 
-	for &cell, index in grid.cells {
+	for &cell in grid.cells {
 		cell.value.mainArea = false
-		_, areaMarked := gridMap[index]
+		_, areaMarked := gridMap[cell.position.axial]
 
 		if !cell.value.walkable || areaMarked do continue
 		
 		areaId := len(areas)
 		newArea : Area
 
-		gridMap[index] = areaId
+		gridMap[cell.position.axial] = areaId
 		append(&shockwave, cell.position.axial)
 
 		for len(shockwave) > 0 {
@@ -41,8 +44,6 @@ markWalkableAreas :: proc(grid: Grid(GridCell)) {
 			}
 		}
 		append(&areas, newArea)
-
-		areaId += 1
 	}
 
 	biggestAreaIx := -1
@@ -65,7 +66,7 @@ PathNode :: struct {
 	distance: int
 }
 
-findPath :: proc(grid: Grid(GridCell), from: Axial, to: Axial) -> (Path, bool) {
+findPath :: proc(grid: Grid(GridCell), from: Axial, to: Axial, allocator := context.allocator) -> (Path, bool) {
 	gridMap := make(map[Axial]PathNode)
 	defer delete(gridMap)
 
@@ -73,6 +74,7 @@ findPath :: proc(grid: Grid(GridCell), from: Axial, to: Axial) -> (Path, bool) {
 	if (!cellIsWalkable(to, grid)) do return nil, false
 
 	shockwave : [dynamic]Axial
+	defer delete(shockwave)
 	gridMap[from] = {
 		previous = from,
 		distance = 0
@@ -114,7 +116,7 @@ findPath :: proc(grid: Grid(GridCell), from: Axial, to: Axial) -> (Path, bool) {
 	}
 
 	if success {
-		result : [dynamic]Axial
+		result := make([dynamic]Axial, allocator)
 		append(&result, to)
 		head := gridMap[to].previous
 
@@ -130,10 +132,10 @@ findPath :: proc(grid: Grid(GridCell), from: Axial, to: Axial) -> (Path, bool) {
 	return nil, false
 }
 
-findWalkableOutline :: proc (grid: Grid(GridCell), from: Axial, limit: int) -> []Axial {
+findWalkableOutline :: proc (grid: Grid(GridCell), from: Axial, limit: int, allocator := context.allocator) -> []Axial {
 	gridMap := make(map[Axial]bool)
 	defer delete(gridMap)
-	shockwave : [dynamic]Axial
+	shockwave := make([dynamic]Axial, allocator)
 
 	gridMap[from] = true
 	append(&shockwave, from)

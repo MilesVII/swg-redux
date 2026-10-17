@@ -6,7 +6,7 @@ import "core:fmt"
 import "core:time"
 import "core:net"
 import "core:os"
-import "core:thread"
+import "core:slice"
 import synchan "core:sync/chan"
 
 import "hex"
@@ -47,7 +47,10 @@ Update :: struct {
 	gameState: GameState,
 	meta: TurnMessage,
 	explosions: []ExplosionBufferEntry,
-	gameFull: bool
+	gameStarted: bool,
+	gameOver: bool,
+	// empty if nobody survived
+	winnerBadge: string
 }
 
 ExplosionBufferEntry :: struct {
@@ -71,7 +74,7 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, lo
 		players = make([]Player, playerCount),
 		managed = managed
 	}
-	
+
 	if managed {
 		utils.loggingSilenced = true
 		networking.verbose = false
@@ -84,7 +87,7 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, lo
 	)
 
 	for &player in session.players do player.online = false
-	
+
 	gameInitRetries := 7
 	for gameInitRetries >= 0 {
 		err: GameInitError
@@ -102,76 +105,52 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, lo
 	utils.log("session created, listening")
 	if session.managed do os.write(os.stdout, { LOBBY_SIGNAL_READY })
 
-	startListeningForClients()
+	networking.startAccepting(receptionSocket)
 
 	for {
 		for synchan.can_recv(networking.rx) {
 			data, ok := synchan.recv(networking.rx)
-			processPackage(data)
+			if ok do processPackage(data)
 		}
+		free_all(context.temp_allocator)
 		time.sleep(SERVER_IDLE_SKIP)
 	}
 }
 
 @(private="file")
-startListeningForClients :: proc() {
-	waitForClients :: proc(t: ^thread.Thread) {
-		for counter := 0; ; counter += 1 {
-			clientSocket := new(net.TCP_Socket)
-			clientSocket^ = networking.waitForClient(receptionSocket)
-			if !session.managed do fmt.printfln("new client, waiting for JOIN")
-			startClientThread(clientSocket)
-		}
-	}
-
-	t := thread.create(waitForClients)
-	if t != nil {
-		t.init_context = context
-		t.user_index = 0
-		thread.start(t)
-	}
-}
-
-@(private="file")
-startClientThread :: proc(socket: ^net.TCP_Socket) {
-	clientWorker :: proc(t: ^thread.Thread) {
-		playerSocket := (transmute(^net.TCP_Socket)t.data)^
-		tx := networking.tx
-		networking.listenBlocking(tx, playerSocket)
-		// listenBlocking terminates if there's a socket error
-		for &player in session.players {
-			if player.socket == playerSocket do player.online = false
-		}
-		free(t.data)
-	}
-
-	t := thread.create(clientWorker)
-	if t != nil {
-		t.init_context = context
-		t.data = socket
-		thread.start(t)
-	}
-}
-
-
-@(private="file")
 processPackage :: proc(p: networking.Package) {
-	if !session.managed do fmt.printfln("player %s said %s", p.header.me, p.header.message)
-	playerName := utils.badgeToString(p.header.me)
+	defer delete(p.payload)
+
+	playerName := utils.badgeToString(p.header.me, context.temp_allocator)
+	if !session.managed && p.header.message < .CONNECTED {
+		fmt.printfln("player %s said %s", playerName, p.header.message)
+	}
+
 	switch p.header.message {
 		case .GENERAL:
+		case .CONNECTED:
+			if !session.managed do fmt.printfln("new client, waiting for JOIN")
+		case .DISCONNECTED:
+			for &player in session.players {
+				if player.online && player.socket == p.socket {
+					player.online = false
+					utils.log(player.id, " disconnected")
+				}
+			}
+			networking.hang(p.socket)
 		case .JOIN:
-			if onJoin(utils.badgeToString(p.header.me), p.socket) do startGameIfFull()
+			if onJoin(playerName, p.socket) do startGameIfFull()
 		case .UPDATE: //ignored
 		case .ORDERS:
-			if (session.players[session.activePlayerIx].id != playerName) do break
+			if session.activePlayerIx < 0 || session.over do break
+			active := session.players[session.activePlayerIx]
+			activeName, named := active.id.?
+			if !named || !active.online || active.socket != p.socket || activeName != playerName do break
 
 			clear(&serverOrderBuffer)
-			decode(p.payload, &serverOrderBuffer)
+			if !decode(p.payload, &serverOrderBuffer) do break
 
-			for unitId in serverOrderBuffer {
-				executeOrder(session.activePlayerIx, unitId, serverOrderBuffer[unitId])
-			}
+			executeOrders(session.activePlayerIx, serverOrderBuffer)
 			bonkUnits()
 
 			session.over = gameOver()
@@ -194,6 +173,10 @@ onJoin :: proc(player: string, socket: net.TCP_Socket) -> bool {
 		if exists && id == player {
 			utils.log(player, " reconnected")
 			// welcome back
+			if p.online && p.socket != socket {
+				// the old connection's DISCONNECTED will close it
+				networking.kick(p.socket)
+			}
 			p.socket = socket
 			p.online = true
 			freeSlot = index
@@ -201,9 +184,9 @@ onJoin :: proc(player: string, socket: net.TCP_Socket) -> bool {
 		}
 	}
 	if freeSlot == -1 do for &p, index in session.players {
-		id, exists := p.id.?
+		_, exists := p.id.?
 		if !exists {
-			p.id = player
+			p.id = utils.badgeToString(utils.stringToBadge(player))
 			p.socket = socket
 			p.online = true
 			freeSlot = index
@@ -213,6 +196,7 @@ onJoin :: proc(player: string, socket: net.TCP_Socket) -> bool {
 
 	if freeSlot == -1 {
 		utils.log("no slots available for player ", player)
+		sendNotice(socket, "NO FREE SLOTS IN THIS GAME")
 		return false
 	}
 	utils.log("assigned slot ", freeSlot)
@@ -227,8 +211,13 @@ gameFull :: proc() -> bool {
 	return true
 }
 @(private="file")
+gameStarted :: proc() -> bool {
+	return session.activePlayerIx >= 0
+}
+@(private="file")
 startGameIfFull :: proc() {
-	if !gameFull() do return
+	// reconnects into a running game must not reset the turn
+	if gameStarted() || !gameFull() do return
 
 	if session.managed do os.write(os.stdout, { LOBBY_SIGNAL_FULL })
 	session.activePlayerIx = 0
@@ -238,7 +227,7 @@ startGameIfFull :: proc() {
 @(private="file")
 broadcastUpdates :: proc() {
 	for player, playerIndex in session.players {
-		sendUpdate(player.socket, playerIndex)
+		if player.online do sendUpdate(player.socket, playerIndex)
 	}
 }
 
@@ -250,11 +239,33 @@ getActivePlayerName :: proc() -> string {
 }
 
 @(private="file")
+getWinnerName :: proc() -> string {
+	for player, pix in session.players {
+		if activeUnitsLeft(pix) {
+			name, named := player.id.?
+			return named ? name : NAME_PLACEHOLDER
+		}
+	}
+	return ""
+}
+
+@(private="file")
+sendNotice :: proc(socket: net.TCP_Socket, notice: string) {
+	header := networking.MessageHeader {
+		message = .GENERAL,
+	}
+	networking.say(socket, &header, encode(notice))
+}
+
+@(private="file")
 sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	header := networking.MessageHeader {
 		message = .UPDATE,
 	}
 	reducedState := session.over ? session.game : getStateForPlayer(&session.game, playerIndex)
+	explosions := reduceExplosionsToVisible(&reducedState, playerIndex, explosionsBuffer[:])
+	defer delete(explosions)
+
 	update := Update {
 		gameState = reducedState,
 		meta = {
@@ -264,21 +275,38 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 			yourId = playerIndex,
 			currentPlayerBadge = getActivePlayerName()
 		},
-		explosions = reduceExplosionsToVisible(&reducedState, playerIndex, explosionsBuffer[:])[:],
-		gameFull = gameFull()
+		explosions = explosions[:],
+		gameStarted = gameStarted(),
+		gameOver = session.over,
+		winnerBadge = session.over ? getWinnerName() : ""
 	}
 
 	networking.say(socket, &header, encode(update))
 	if !session.over do deleteState(reducedState)
 }
 
+// orders run in unit id order so results don't depend on map iteration order
+// units built during this turn can't act until the next one
+executeOrders :: proc(playerIx: int, orders: OrderSet) {
+	idLimit := session.game.players[playerIx].unitIdCounter
+
+	unitIds := make([dynamic]int, 0, len(orders), context.temp_allocator)
+	for unitId in orders do if unitId < idLimit do append(&unitIds, unitId)
+	slice.sort(unitIds[:])
+
+	for unitId in unitIds do executeOrder(playerIx, unitId, orders[unitId])
+}
+
 executeOrder :: proc(playerIx: int, unitId: int, order: Order) {
 	unit, ok := findUnitById(session.game.players[playerIx].units[:], unitId)
 	if !ok do return
+	if !orderAllowed(unit^, order) {
+		utils.log("rejected order ", order, " for unit ", unitId)
+		return
+	}
 
 	switch order.type {
-		case .BUILD: 
-			if unit.gold <= 0 do break
+		case .BUILD:
 			unit.gold -= 1
 
 			newUnit := GameUnit {
@@ -287,6 +315,7 @@ executeOrder :: proc(playerIx: int, unitId: int, order: Order) {
 				id = session.game.players[playerIx].unitIdCounter,
 				gold = order.targetUnitType == .TONK ? 2 : 0
 			}
+			// invalidates `unit`
 			append(&session.game.players[playerIx].units, newUnit)
 			session.game.players[playerIx].unitIdCounter += 1
 		case .DIG:
@@ -314,6 +343,50 @@ executeOrder :: proc(playerIx: int, unitId: int, order: Order) {
 	}
 }
 
+// mirrors the checks the client does before placing an order
+@(private="file")
+orderAllowed :: proc(unit: GameUnit, order: Order) -> bool {
+	grid := session.game.grid
+	target := order.target
+	onGrid := hex.isWithinGrid(target, grid.radius)
+	distance := hex.distance(unit.position, target)
+
+	cellAt :: proc(grid: GameGrid, at: hex.Axial) -> hex.GridCell {
+		return grid.cells[hex.axialToIndex(at, grid.radius)].value
+	}
+
+	switch order.type {
+		case .BUILD:
+			validType := order.targetUnitType >= min(GameUnitType) && order.targetUnitType <= max(GameUnitType)
+			return validType &&
+				unit.type == .MCV &&
+				unit.gold > 0 &&
+				distance == 1 &&
+				onGrid &&
+				cellAt(grid, target).walkable &&
+				noUnitsAt(target, session.game.players)
+		case .DIG:
+			return unit.type == .MCV &&
+				unit.gold < 3 &&
+				distance == 1 &&
+				onGrid &&
+				cellAt(grid, target).gold > 0
+		case .DIREKT:
+			return unit.type == .TONK &&
+				distance <= ARANGE[.TONK] &&
+				hex.isVisible(grid, unit.position, target)
+		case .INDIREKT:
+			return unit.type == .GUN &&
+				distance <= ARANGE[.GUN]
+		case .MOVE:
+			if MOVING[unit.type] == 0 || target == unit.position do return false
+			if !noUnitsAt(target, session.game.players) do return false
+			allowedCells := hex.findWalkableOutline(grid, unit.position, MOVING[unit.type], context.temp_allocator)
+			return utils.includes(allowedCells, &target)
+	}
+	return false
+}
+
 bonkUnits :: proc() {
 	for &bonk in explosionsBuffer {
 		if !hex.isWithinGrid(bonk.position, session.game.grid.radius) do continue
@@ -333,7 +406,7 @@ bonkUnits :: proc() {
 
 gameOver :: proc() -> bool {
 	ablePlayers := 0
-	for player, pix in session.game.players {
+	for _, pix in session.game.players {
 		if activeUnitsLeft(pix) do ablePlayers += 1
 	}
 

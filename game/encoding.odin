@@ -9,7 +9,13 @@ encode :: proc(data: $T) -> []u8 {
 	return bytes
 }
 
-decode :: proc(data: []u8, buffer: ^$T) {
+// payloads come from the network, so a malformed one is reported instead of crashing
+@(require_results)
+decode :: proc(data: []u8, buffer: ^$T) -> bool {
 	err := cbor.unmarshal(string(data), buffer, { .Trusted_Input })
-	if err != nil do fmt.panicf("failed to unmarshal value with \"%s\"", err)
+	if err != nil {
+		fmt.printfln("failed to unmarshal value with \"%v\"", err)
+		return false
+	}
+	return true
 }

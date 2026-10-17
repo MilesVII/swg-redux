@@ -2,7 +2,6 @@ package utils
 
 import rl "vendor:raylib"
 import "core:unicode/utf8"
-import "core:strings"
 import "core:math"
 import "core:math/rand"
 import "core:fmt"
@@ -50,18 +49,20 @@ Badge :: [BADGE_SIZE]rune
 
 stringToBadge :: proc(name: string) -> Badge {
 	r : Badge
-	runes := utf8.string_to_runes(name)
-	for c, i in name {
+	i := 0
+	for c in name {
 		if i >= BADGE_SIZE do break
 		r[i] = c
+		i += 1
 	}
 	return r
 }
 
-badgeToString :: proc(badge: Badge) -> string {
+badgeToString :: proc(badge: Badge, allocator := context.allocator) -> string {
 	badge := badge
-	cutset := [1]rune { }
-	return strings.trim(utf8.runes_to_string(badge[:]), utf8.runes_to_string(cutset[:]))
+	length := 0
+	for length < BADGE_SIZE && badge[length] != 0 do length += 1
+	return utf8.runes_to_string(badge[:length], allocator)
 }
 
 swap :: proc(a: ^$T, b:^T) {

@@ -2,7 +2,6 @@ package shaded
 
 import rl "vendor:raylib"
 
-import "core:math"
 
 import "../utils"
 

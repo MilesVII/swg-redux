@@ -3,7 +3,6 @@ package hex
 import rl "vendor:raylib"
 import "core:math"
 import simplex "core:math/noise"
-import "core:fmt"
 
 fade :: proc(t: f32) -> f32 {
 	return t * t * t * (t * (t * 6 - 15) + 10) - (t > .5 ? 0 : .017)

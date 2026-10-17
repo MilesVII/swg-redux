@@ -4,14 +4,14 @@ import rl "vendor:raylib"
 
 Line :: [4]rl.Vector2
 
-outline :: proc (cells: []Axial, thickness := f32(.2)) -> []Line {
-	lines : [dynamic]Line
+outline :: proc (cells: []Axial, thickness := f32(.2), allocator := context.allocator) -> []Line {
+	lines := make([dynamic]Line, allocator)
 
 	gridMap := make(map[Axial]bool)
 	defer delete(gridMap)
 	for cell in cells do gridMap[cell] = true
 
-	for cell, cellIndex in cells {
+	for cell in cells {
 		vx := vertesex(cell)
 		vxOuter := vertesex(cell, 1 + thickness)
 

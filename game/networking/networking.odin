@@ -3,13 +3,16 @@ package networking
 import "core:net"
 import "core:mem"
 import "core:slice"
-import "core:encoding/hex"
 import "core:crypto/hash"
 import "core:fmt"
-import "core:strings"
+import "core:sync"
+import "core:thread"
+import "core:time"
 import synchan "core:sync/chan"
 
-Message :: enum { JOIN, UPDATE, ORDERS, GENERAL }
+// CONNECTED and DISCONNECTED never travel over the wire:
+// listener threads inject them so the main thread can track connections
+Message :: enum { JOIN, UPDATE, ORDERS, GENERAL, CONNECTED, DISCONNECTED }
 MessageHeader :: struct {
 	message: Message,
 	me: [16]rune,
@@ -18,12 +21,23 @@ MessageHeader :: struct {
 Package :: struct {
 	header: MessageHeader,
 	payload: []u8,
-	socket: net.TCP_Socket
+	socket: net.TCP_Socket,
+	// unique per connection, unlike socket handles which get reused by the OS
+	connection: int
 }
+
+// guards against hostile or corrupted headers asking for huge allocations
+MAX_PAYLOAD_SIZE :: 64 * mem.Megabyte
+
+@(private="file")
+ACCEPT_RETRY_DELAY := time.Millisecond * 100
 
 tx: synchan.Chan(Package, .Send)
 rx: synchan.Chan(Package, .Recv)
 verbose := true
+
+@(private="file")
+connectionCounter: int
 
 init :: proc() {
 	channel, err := synchan.create_buffered(
@@ -43,76 +57,140 @@ openServerSocket :: proc(address: net.Address, port: int) -> net.TCP_Socket {
 	if err != nil {
 		fmt.panicf("listen error : %s", err)
 	}
+	disableInheritance(socket)
 
 	return socket
 }
 
-dial :: proc(to: net.Address, port: int) -> net.TCP_Socket {
+// checks whether a port can be bound right now
+portAvailable :: proc(address: net.Address, port: int) -> bool {
+	socket, err := net.listen_tcp(net.Endpoint{
+		port = port,
+		address = address
+	})
+	if err != nil do return false
+	net.close(socket)
+	return true
+}
+
+dial :: proc(to: net.Address, port: int) -> (net.TCP_Socket, bool) {
 	socket, err := net.dial_tcp(to, port)
 
 	if err != nil {
-		fmt.panicf("can't dial localhost:%s; %s", port, err)
+		fmt.printfln("can't dial %v:%d; %v", to, port, err)
+		return socket, false
 	}
+	disableInheritance(socket)
 
-	return socket
+	return socket, true
 }
 
 hang :: proc(socket: net.TCP_Socket) {
 	net.close(socket)
 }
 
-waitForClient :: proc(socket: net.TCP_Socket) -> net.TCP_Socket {
-	clientSocket, clientEndpoint, acceptErr := net.accept_tcp(socket)
-
-	if acceptErr != nil {
-		fmt.panicf("%s",acceptErr)
-	}
-
-	return clientSocket
+// makes the listener thread of the socket quit and report DISCONNECTED
+// without closing the handle, so it can't be reused while the thread still holds it
+kick :: proc(socket: net.TCP_Socket) {
+	net.shutdown(socket, .Both)
 }
 
-listenBlocking :: proc(channel: synchan.Chan(Package, .Send), socket: net.TCP_Socket) {
+// accepts clients forever on a separate thread
+// every client gets a listener thread, see `listen`
+startAccepting :: proc(socket: net.TCP_Socket) {
+	acceptor :: proc(socket: net.TCP_Socket) {
+		for {
+			clientSocket, _, acceptErr := net.accept_tcp(socket)
+			if acceptErr != nil {
+				if verbose do fmt.println("accept error:", acceptErr)
+				time.sleep(ACCEPT_RETRY_DELAY)
+				continue
+			}
+			disableInheritance(clientSocket)
+			listen(clientSocket)
+		}
+	}
+
+	thread.create_and_start_with_poly_data(socket, acceptor, self_cleanup = true)
+}
+
+// reads packages from the socket on a separate thread and forwards them to `rx`
+// sends CONNECTED first and DISCONNECTED once the socket is closed or broken
+// returns the connection id that marks every package from this socket
+listen :: proc(socket: net.TCP_Socket) -> int {
+	Listener :: struct {
+		socket: net.TCP_Socket,
+		connection: int
+	}
+	listener :: proc(l: Listener) {
+		local :: proc(message: Message, l: Listener) {
+			synchan.send(tx, Package {
+				header = { message = message },
+				socket = l.socket,
+				connection = l.connection
+			})
+		}
+
+		local(.CONNECTED, l)
+		listenBlocking(tx, l.socket, l.connection)
+		local(.DISCONNECTED, l)
+	}
+
+	connection := sync.atomic_add(&connectionCounter, 1) + 1
+	thread.create_and_start_with_poly_data(
+		Listener { socket, connection },
+		listener,
+		self_cleanup = true
+	)
+	return connection
+}
+
+// returns once the socket is closed or broken
+listenBlocking :: proc(channel: synchan.Chan(Package, .Send), socket: net.TCP_Socket, connection: int) {
 	for {
 		ok, header, payload := readPackage(socket)
 		if !ok do break
 		if verbose {
-			fmt.println(
-				"[net] hear",
-				header.message,
-				header.payloadSize == 0 ? "empty" : chksum(payload),
-				len(payload),
-				"bytes"
-			)
+			if header.payloadSize == 0 {
+				fmt.println("[net] hear", header.message, "empty")
+			} else {
+				fmt.printfln("[net] hear %v %06x %d bytes", header.message, chksum(payload), len(payload))
+			}
 		}
-		
-		synchan.send(channel, Package { header, payload, socket })
+
+		synchan.send(channel, Package { header, payload, socket, connection })
 	}
 }
 
-say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: []u8 = nil, freePayload: bool = true) {
+say :: proc(socket: net.TCP_Socket, header: ^MessageHeader, payload: []u8 = nil, freePayload: bool = true) -> bool {
+	defer if freePayload && payload != nil do delete(payload)
+
 	header.payloadSize = u32(len(payload))
-	// bytes := transmute([^]u8)&payload
 	headerSlice := mem.slice_ptr(header, 1)
 	headerBytes := slice.to_bytes(headerSlice)
 
 	if verbose {
-		fmt.println(
-			"[net] say",
-			header.message,
-			header.payloadSize == 0 ? "empty" : chksum(payload),
-			len(payload),
-			"bytes"
-		)
+		if header.payloadSize == 0 {
+			fmt.println("[net] say", header.message, "empty")
+		} else {
+			fmt.printfln("[net] say %v %06x %d bytes", header.message, chksum(payload), len(payload))
+		}
 	}
 
 	_, err := net.send_tcp(socket, headerBytes)
-	if err != nil && verbose do fmt.println("no voice (header): ", err)
+	if err != nil {
+		if verbose do fmt.println("no voice (header): ", err)
+		return false
+	}
 
 	if header.payloadSize > 0 {
 		_, err2 := net.send_tcp(socket, payload)
-		if err2 != nil && verbose do fmt.println("no voice (payload): ", err2)
-		if freePayload do delete(payload)
+		if err2 != nil {
+			if verbose do fmt.println("no voice (payload): ", err2)
+			return false
+		}
 	}
+	return true
 }
 
 @(private)
@@ -122,6 +200,16 @@ readPackage :: proc(socket: net.TCP_Socket) -> (bool, MessageHeader, []u8) {
 	headerBuffer := slice.to_bytes(headerSlice)
 
 	if !fillBuffer(socket, headerBuffer) do return false, header, nil
+
+	// local-only and unknown message kinds can't come from a peer
+	if header.message >= .CONNECTED || header.message < .JOIN {
+		if verbose do fmt.println("peer sent invalid message kind, dropping connection")
+		return false, header, nil
+	}
+	if header.payloadSize > MAX_PAYLOAD_SIZE {
+		if verbose do fmt.println("peer sent oversized payload, dropping connection")
+		return false, header, nil
+	}
 
 	if header.payloadSize == 0 do return true, header, nil
 
@@ -136,22 +224,24 @@ readPackage :: proc(socket: net.TCP_Socket) -> (bool, MessageHeader, []u8) {
 
 @(private)
 fillBuffer :: proc(socket: net.TCP_Socket, buffer: []u8) -> bool {
-	receivedSize: u32 = 0
-	for {
-		size, e2 := net.recv_tcp(socket, buffer[receivedSize:])
-		receivedSize += u32(size)
-		if e2 != nil && verbose {
-			fmt.printfln("error while reading socket: %s", e2)
+	receivedSize := 0
+	for receivedSize < len(buffer) {
+		size, err := net.recv_tcp(socket, buffer[receivedSize:])
+		if err != nil {
+			if verbose do fmt.printfln("error while reading socket: %s", err)
 			return false
 		}
-
-		if (receivedSize == u32(len(buffer))) do return true
+		// zero bytes without an error means the peer closed the connection
+		if size == 0 do return false
+		receivedSize += size
 	}
+	return true
 }
 
+// tail of SHA256, only used to eyeball payloads in logs
 @(private)
-chksum :: proc(payload: []u8) -> string {
-	hashsum := transmute(string)hex.encode(hash.hash_bytes(.SHA256, payload))
-	substring, ok := strings.substring_from(hashsum, len(hashsum) - 6)
-	return ok ? substring : hashsum
+chksum :: proc(payload: []u8) -> u32 {
+	digest: [32]u8
+	hash.hash_bytes_to_buffer(.SHA256, payload, digest[:])
+	return u32(digest[29]) << 16 | u32(digest[30]) << 8 | u32(digest[31])
 }

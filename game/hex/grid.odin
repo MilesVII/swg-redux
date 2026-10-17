@@ -4,8 +4,6 @@ import rl "vendor:raylib"
 import "core:math"
 import "../utils"
 
-import "core:fmt"
-
 Axial :: [2]int
 
 //   2

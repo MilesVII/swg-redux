@@ -2,10 +2,6 @@ package ui
 
 import rl "vendor:raylib"
 
-import "core:fmt"
-import "core:strings"
-import "core:math"
-
 import "../hex"
 import "../utils"
 import "../shaded"
@@ -100,7 +96,6 @@ onResize :: proc() {
 
 updateIO :: proc(cameraLocked: bool) {
 	if rl.IsWindowResized() do onResize()
-	dt := rl.GetFrameTime()
 	pointer = rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
 	pointedCell = hex.worldToAxial(pointer)
 
@@ -110,9 +105,9 @@ updateIO :: proc(cameraLocked: bool) {
 	if rl.IsKeyDown(.Q) do camera.zoom /= 1.01
 	wheel := rl.GetMouseWheelMove()
 	if wheel != 0 {
-		world := rl.GetScreenToWorld2D(rl.GetMousePosition(), camera);
-		camera.offset = rl.GetMousePosition();
-		camera.target = world;
+		world := rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
+		camera.offset = rl.GetMousePosition()
+		camera.target = world
 		camera.zoom *= 1.0 + wheel * .04
 	}
 	camera.zoom = rl.Clamp(camera.zoom, 5, 100)
