@@ -12,7 +12,7 @@ cp config.toml.example config.toml
 
 Specify operating mode if needed:
 ```
-swg-redux --mode client --name username
+swg-redux --mode client --name username --renderer 3d
 swg-redux --mode server --port 27014
 swg-redux --mode lobby
 ```
@@ -33,17 +33,35 @@ Refer to `config.toml.example` for config details
 
 - `P` toggles post effects shader
 - `ctrl`+`P` reloads post effects shader from file, useful for adjusting or customizing
+- `[` / `]` lower and raise post effects intensity
+- `F1` opens settings, including post effects distortion, decoloration and CRT pixel size
+- Settings are saved per player name to `settings.toml` and restored on start, `--renderer` overrides the saved renderer
+- `F2` switches between 2D and 3D renderers, the default is set with `renderer` in config.toml
+- `F12` saves a screenshot
 - Window is resizable
 
 ### In menu
 - Arrows / `WASD` and `Enter` to navigate menu, adjust parameters and select items
 
 ### In game
-- `WASD` or click and drag to pan camera
-- `Q/E` or mousewheel to zoom
 - `Z/X/C/V` to pick order types
 - `Enter` to submit orders
 - `Esc` to abort current order placement
+
+#### 2D camera
+- `WASD` or click and drag to pan camera
+- `Q/E` or mousewheel to zoom
+
+#### 3D camera
+- `WASD` or click and drag to pan camera
+- `Q/E` or right click and drag to orbit
+- `R/F` to tilt, right click and drag works too
+- Mousewheel or `-/=` to zoom
+- `Home` resets the view
+- Field of view, tilt and dithering size can be adjusted in settings
+
+### Unit models
+The 3D renderer draws placeholder boxes unless it finds `assets/models/mcv`, `tonk` or `gun` with a `.glb`, `.gltf`, `.obj`, `.iqm` or `.m3d` extension. Models are tinted with the player color, one unit equals the distance between neighboring hex centers, the base should sit at the origin and the front should face +Z
 
 ## Credits
 - [toml_parser](https://github.com/Up05/toml_parser)

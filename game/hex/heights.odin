@@ -21,7 +21,8 @@ Octave :: struct {
 	factor: f32
 }
 
-height :: proc(at: rl.Vector2, levels: int, seed := i64(0)) -> int {
+// continuous terrain height, roughly 0..1
+elevation :: proc(at: rl.Vector2, seed := i64(0)) -> f32 {
 	octaves := [?]Octave{
 		{.1, .5},
 		{.3, .3},
@@ -31,7 +32,14 @@ height :: proc(at: rl.Vector2, levels: int, seed := i64(0)) -> int {
 	for octave in octaves {
 		n += noise(at, octave.zoom, seed) * octave.factor
 	}
-	n = fade(n)
-	level := int(math.round(n * f32(levels - 1)))
+	return fade(n)
+}
+
+height :: proc(at: rl.Vector2, levels: int, seed := i64(0)) -> int {
+	return heightLevel(elevation(at, seed), levels)
+}
+
+heightLevel :: proc(elevation: f32, levels: int) -> int {
+	level := int(math.round(elevation * f32(levels - 1)))
 	return clamp(level, 0, levels - 1)
 }

@@ -262,8 +262,11 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	header := networking.MessageHeader {
 		message = .UPDATE,
 	}
-	reducedState := session.over ? session.game : getStateForPlayer(&session.game, playerIndex)
-	explosions := reduceExplosionsToVisible(&reducedState, playerIndex, explosionsBuffer[:])
+	// explosions are filtered by what the player sees, even once the whole map is revealed
+	visibleState := getStateForPlayer(&session.game, playerIndex)
+	defer deleteState(visibleState)
+	reducedState := session.over ? session.game : visibleState
+	explosions := reduceExplosionsToVisible(&visibleState, playerIndex, explosionsBuffer[:])
 	defer delete(explosions)
 
 	update := Update {
@@ -282,7 +285,6 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	}
 
 	networking.say(socket, &header, encode(update))
-	if !session.over do deleteState(reducedState)
 }
 
 // orders run in unit id order so results don't depend on map iteration order

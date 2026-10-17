@@ -4,6 +4,8 @@ import rl "vendor:raylib"
 
 import "core:net"
 import "core:strings"
+import "core:fmt"
+import "core:time"
 import synchan "core:sync/chan"
 
 import "hex"
@@ -60,6 +62,9 @@ Explosion :: struct {
 	lethal: bool,
 	highlight: bool,
 	elapsedTime: f32,
+	// the hit moment has been shown by the view
+	impacted: bool,
+	// the hit has been applied to the state
 	bonked: bool
 }
 
@@ -100,6 +105,9 @@ clientUpdateBuffer: Update
 clientUpdateAnimationsPending: bool = false
 @(private)
 clientFirstUpdate: bool = true
+// bumped whenever a new server state replaces the shown one
+@(private)
+clientStateVersion: int
 
 stripeShader: shaded.StripedShader
 shockShader: shaded.ShockShader
@@ -126,7 +134,9 @@ client :: proc(
 	lobbyEnabled: bool,
 	lobbyAddress: net.Address,
 	lobbyPort: int,
-	lobbyToken: [64]rune
+	lobbyToken: [64]rune,
+	renderer3D: bool,
+	rendererFromCommandLine: bool
 ) {
 	rl.SetTraceLogLevel(.WARNING)
 	rl.SetConfigFlags({ .WINDOW_RESIZABLE })
@@ -159,6 +169,10 @@ client :: proc(
 
 	vcrFont = rl.LoadFontEx("assets/VCR_OSD_MONO.ttf", 16, nil, 0)
 
+	for view in CLIENT_VIEWS do if view.init != nil do view.init()
+	activeView = renderer3D ? &VIEW_3D : &VIEW_2D
+	loadClientSettings(name, rendererFromCommandLine)
+
 	if lobbyEnabled {
 		menuState.ngr.token = lobbyToken
 		menuState.ngr.name = name
@@ -178,21 +192,63 @@ client :: proc(
 		utils.updateFlicker()
 
 		if clientState.status != .PLAYING do clientState.uiState = .DISABLED
-		ui.updateIO(!clientState.cameraControlsEnabled)
-		ui.draw(clientDrawWorld, clientDrawHUD, clientPostFX, clientDrawBackground)
-		flushClickQueue()
+		ui.updateWindow()
+		handleClientHotkeys()
 
-		if rl.IsKeyPressed(.P) {
-			if rl.IsKeyDown(.LEFT_CONTROL) || rl.IsKeyDown(.RIGHT_CONTROL) {
-				shaded.deletePostFXShader(postfxShader)
-				postfxShader = shaded.createPostFXShader()
-			} else {
-				postfxEnabled = !postfxEnabled
-			}
-		}
+		inputBlocked := settingsPanelHovered()
+		utils.cursorHoverBegin()
+		activeView.update(!clientState.cameraControlsEnabled, inputBlocked)
+		updateExplosions()
+		clientPlanFrame(inputBlocked)
+		ui.drawFrame(activeView.scene, clientDrawHUD, clientPostFX)
+		utils.cursorHoverEnd()
+		if rl.IsKeyPressed(.F12) do saveScreenshot()
+		flushClickQueue()
+		saveClientSettingsIfChanged()
 
 		free_all(context.temp_allocator)
 	}
+
+	saveClientSettingsIfChanged(force = true)
+	for view in CLIENT_VIEWS do if view.deinit != nil do view.deinit()
+}
+
+@(private="file")
+handleClientHotkeys :: proc() {
+	if rl.IsKeyPressed(.P) {
+		if rl.IsKeyDown(.LEFT_CONTROL) || rl.IsKeyDown(.RIGHT_CONTROL) {
+			// keep the settings, only the code is reloaded
+			state := postfxShader.state
+			shaded.deletePostFXShader(postfxShader)
+			postfxShader = shaded.createPostFXShader()
+			postfxShader.state = state
+		} else {
+			postfxEnabled = !postfxEnabled
+		}
+	}
+	if rl.IsKeyPressed(.LEFT_BRACKET) || rl.IsKeyPressedRepeat(.LEFT_BRACKET) {
+		postfxShader.state.intensity = clamp(postfxShader.state.intensity - .1, 0, 1)
+	}
+	if rl.IsKeyPressed(.RIGHT_BRACKET) || rl.IsKeyPressedRepeat(.RIGHT_BRACKET) {
+		postfxShader.state.intensity = clamp(postfxShader.state.intensity + .1, 0, 1)
+	}
+	if rl.IsKeyPressed(.F1) do settingsOpen = !settingsOpen
+	if rl.IsKeyPressed(.F2) do switchView()
+}
+
+@(private="file")
+saveScreenshot :: proc() {
+	now := time.now()
+	y, mon, d := time.date(now)
+	h, m, s := time.clock(now)
+	path := fmt.ctprintf("screenshot-%04d%02d%02d-%02d%02d%02d.png", y, int(mon), d, h, m, s)
+	ui.saveFrame(path)
+	setNotice(fmt.tprintf("SAVED %s", path))
+}
+
+@(private)
+switchView :: proc() {
+	activeView = activeView == &VIEW_3D ? &VIEW_2D : &VIEW_3D
 }
 
 @(private="file")
@@ -215,8 +271,7 @@ clientPostFX :: proc(tex: rl.RenderTexture2D) {
 		if !bonk.lethal do continue
 		rl.BeginTextureMode(tex)
 
-		origin := hex.axialToWorld(bonk.at)
-		screenOrigin := rl.GetWorldToScreen2D(origin, ui.camera)
+		screenOrigin := activeView.toScreen(bonk.at)
 		shockShader.state.origin = { screenOrigin.x, f32(ui.windowSize.y) - screenOrigin.y }
 		shockShader.state.progress = bonk.elapsedTime / EXPLOSION_DURATION_S
 		shockShader.state.resolution = { f32(ui.windowSize.x), f32(ui.windowSize.y) }
@@ -233,77 +288,54 @@ clientPostFX :: proc(tex: rl.RenderTexture2D) {
 	}
 }
 
+// explosion timeline shared by all views: each bonk starts once the previous one
+// is EXPLOSION_CHAINING_S old, hits after EXPLOSION_HATTRICK_S and expires after
+// EXPLOSION_DURATION_S, then the buffered server state is applied
 @(private="file")
-clientDrawWorld :: proc() {
-	if clientState.status == .CONNECTING do return
+updateExplosions :: proc() {
+	if !clientUpdateAnimationsPending do return
 
-	ui.drawGrid(clientState.game.grid)
-
-	if clientState.uiState != .DISABLED {
-		ui.drawCellBorder(ui.pointedCell, .2, rl.WHITE)
-	}
-
-	for &player, pix in clientState.game.players {
-		for &unit in player.units {
-			ordered := unit.id in clientState.orders
-			highlight := clientState.status == .PLAYING && pix == clientState.myPix && !ordered
-			unitHovered := drawUnit(
-				unit.position,
-				unit.type,
-				unit.gold,
-				player.color,
-				highlight
-			)
-			if pix != clientState.myPix do continue
-
-			utils.setCursorHover(unitHovered)
-
-			shouldSelect :=
-				unitHovered &&
-				clientState.uiState == .FREE &&
-				selectedUnitId != unit.id &&
-				rl.IsMouseButtonPressed(.LEFT)
-
-			if shouldSelect do postponeClick(SelectAction(unit.id))
+	for &bonk in clientState.explosions {
+		if bonk.elapsedTime == 0 {
+			rl.PlaySound(hitSound)
+			if activeView.onExplosionStart != nil do activeView.onExplosionStart(bonk)
 		}
-	}
+		bonk.elapsedTime += rl.GetFrameTime()
 
-	if clientUpdateAnimationsPending {
-		for &bonk in clientState.explosions {
-			if bonk.elapsedTime == 0 do rl.PlaySound(hitSound)
-			bonk.elapsedTime += rl.GetFrameTime()
-			ui.drawExplosion(bonk.at, bonk.elapsedTime / (EXPLOSION_HATTRICK_S * 2.0), &sweepShader)
-			onGrid := hex.isWithinGrid(bonk.at, clientState.game.grid.radius)
+		if !bonk.impacted && bonk.elapsedTime > EXPLOSION_HATTRICK_S {
+			bonk.impacted = true
+			if activeView.onExplosionImpact != nil do activeView.onExplosionImpact(bonk)
+		}
 
-			if onGrid && !bonk.bonked && bonk.elapsedTime > EXPLOSION_HATTRICK_S {
-				bonk.bonked = true
-				if bonk.highlight && bonk.lethal {
-					rl.PlaySound(fragSound)
-					clientState.fragCounter += 1
-				}
-
-				uix, pix, found := findUnitAt(&clientState.game, bonk.at)
-				if found {
-					unit := &clientState.game.players[pix].units[uix]
-					if unit.type == .TONK && unit.gold > 1 do unit.gold -= 1
-					else do unordered_remove(&clientState.game.players[pix].units, uix)
-				}
+		onGrid := hex.isWithinGrid(bonk.at, clientState.game.grid.radius)
+		if onGrid && !bonk.bonked && bonk.elapsedTime > EXPLOSION_HATTRICK_S {
+			bonk.bonked = true
+			if bonk.highlight && bonk.lethal {
+				rl.PlaySound(fragSound)
+				clientState.fragCounter += 1
 			}
-			if bonk.elapsedTime < EXPLOSION_CHAINING_S do break
-		}
 
-		if allExplosionsBonked() && clientState.fragCounterTTS == 0 {
-			clientState.fragCounterTTS = FRAG_COUNTER_DISAPPEAR_S
-		}
-		for i := len(clientState.explosions) - 1; i >= 0; i -= 1 {
-			if clientState.explosions[i].elapsedTime >= EXPLOSION_DURATION_S {
-				ordered_remove(&clientState.explosions, i)
+			uix, pix, found := findUnitAt(&clientState.game, bonk.at)
+			if found {
+				unit := &clientState.game.players[pix].units[uix]
+				if unit.type == .TONK && unit.gold > 1 do unit.gold -= 1
+				else do unordered_remove(&clientState.game.players[pix].units, uix)
 			}
 		}
-		if len(clientState.explosions) == 0 {
-			applyBufferedUpdate()
-			clientUpdateAnimationsPending = false
+		if bonk.elapsedTime < EXPLOSION_CHAINING_S do break
+	}
+
+	if allExplosionsBonked() && clientState.fragCounterTTS == 0 {
+		clientState.fragCounterTTS = FRAG_COUNTER_DISAPPEAR_S
+	}
+	for i := len(clientState.explosions) - 1; i >= 0; i -= 1 {
+		if clientState.explosions[i].elapsedTime >= EXPLOSION_DURATION_S {
+			ordered_remove(&clientState.explosions, i)
 		}
+	}
+	if len(clientState.explosions) == 0 {
+		applyBufferedUpdate()
+		clientUpdateAnimationsPending = false
 	}
 }
 
@@ -409,7 +441,7 @@ onUpdate :: proc(payload: []u8) {
 		applyBufferedUpdate()
 		if clientState.myPix >= 0 && clientState.myPix < len(clientState.game.players) {
 			units := clientState.game.players[clientState.myPix].units
-			if len(units) > 0 do ui.camera.target = hex.axialToWorld(units[0].position)
+			if len(units) > 0 do for view in CLIENT_VIEWS do view.focus(units[0].position)
 		}
 
 		clientFirstUpdate = false
@@ -429,6 +461,7 @@ onUpdate :: proc(payload: []u8) {
 				lethal = bonk.lethal,
 				highlight = bonk.pix == 1,
 				elapsedTime = 0,
+				impacted = false,
 				bonked = false
 			}
 		)
@@ -441,6 +474,7 @@ applyBufferedUpdate :: proc() {
 	deleteState(clientState.game)
 	clientState.game = clientUpdateBuffer.gameState
 	clientUpdateBuffer.gameState = {}
+	clientStateVersion += 1
 
 	delete(clientState.activePlayerName)
 	clientState.activePlayerName = clientUpdateBuffer.meta.currentPlayerBadge

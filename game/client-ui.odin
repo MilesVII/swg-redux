@@ -9,7 +9,6 @@ import "core:strings"
 import "ui"
 import "utils"
 import "hex"
-import "shaded"
 
 NO_SELECTION :: -1
 
@@ -119,27 +118,211 @@ BUTTON_ROW_BLD := [?]ui.Button {
 	}
 }
 
+// renderer-neutral marks on the map, rebuilt every frame by clientPlanFrame
+// and drawn by whichever view is active
+OverlayCell :: struct {
+	at: hex.Axial,
+	thickness: f32,
+	color: rl.Color
+}
+// outline around a set of cells
+OverlayArea :: struct {
+	cells: []hex.Axial,
+	color: rl.Color
+}
+OverlayPath :: struct {
+	path: hex.Path,
+	color: rl.Color
+}
+OverlayShot :: struct {
+	from: hex.Axial,
+	to: hex.Axial,
+	color: rl.Color,
+	indirekt: bool
+}
+// a unit that will be built there
+OverlayGhost :: struct {
+	at: hex.Axial,
+	type: GameUnitType,
+	color: rl.Color
+}
+OverlayCommand :: union {
+	OverlayCell,
+	OverlayArea,
+	OverlayPath,
+	OverlayShot,
+	OverlayGhost
+}
+
 @(private)
-clientDrawBackground :: proc() {
-	rl.ClearBackground(rl.RAYWHITE)
-	shaded.updateBackgroundShader(&backgroundShader, ui.camera.offset, ui.camera.zoom)
-	rl.BeginShaderMode(backgroundShader.shader)
+overlays: [dynamic]OverlayCommand
+// cell under the cursor, if orders can be placed
+@(private)
+hoverCell: Maybe(hex.Axial)
 
-	from := rl.GetScreenToWorld2D([2]f32 {0, 0}, ui.camera)
-	to := rl.GetScreenToWorld2D(ui.windowSizeF(), ui.camera)
+@(private="file")
+overlay :: proc(command: OverlayCommand) {
+	append(&overlays, command)
+}
 
-	rl.DrawRectanglePro(
-		rl.Rectangle {
-			x = from.x,
-			y = from.y,
-			width = to.x - from.x,
-			height = to.y - from.y
-		},
-		rl.Vector2 {0, 0},
-		0,
-		rl.WHITE
-	)
-	rl.EndShaderMode()
+// selection, order previews and their clicks; runs before drawing
+// `inputBlocked` is set when the cursor is over a panel
+@(private)
+clientPlanFrame :: proc(inputBlocked: bool) {
+	overlays = make([dynamic]OverlayCommand, context.temp_allocator)
+	hoverCell = nil
+	if clientState.uiState != .DISABLED && !inputBlocked do hoverCell = ui.pointedCell
+
+	if clientState.status != .PLAYING {
+		selectedUnitId = NO_SELECTION
+		return
+	}
+
+	if clientState.uiState == .FREE && !inputBlocked && clientState.myPix < len(clientState.game.players) {
+		for unit in clientState.game.players[clientState.myPix].units {
+			if unit.position != ui.pointedCell do continue
+			utils.setCursorHover(true)
+			if selectedUnitId != unit.id && rl.IsMouseButtonPressed(.LEFT) {
+				postponeClick(SelectAction(unit.id))
+			}
+		}
+	}
+
+	planOrders(clientState.orders)
+	if getSelectedUnit() != nil do planOrderPreview(inputBlocked)
+}
+
+@(private="file")
+planOrderPreview :: proc(inputBlocked: bool) {
+	selectedUnit := getSelectedUnit()
+	pointed := ui.pointedCell
+	clicked := !inputBlocked && rl.IsMouseButtonPressed(.LEFT)
+	gridRadius := clientState.game.grid.radius
+	onGrid := hex.isWithinGrid(pointed, gridRadius)
+	pointedCell: hex.GridCell
+	if onGrid do pointedCell = clientState.game.grid.cells[hex.axialToIndex(pointed, gridRadius)].value
+
+	switch clientState.uiState {
+		case .DISABLED:
+		case .FREE:
+		case .ORDER_BLD:
+			buildingAllowed :=
+				hex.distance(selectedUnit.position, pointed) == 1 &&
+				onGrid &&
+				pointedCell.walkable &&
+				noOrdersAt(pointed, clientState.orders) &&
+				noUnitsAt(pointed, clientState.game.players[:])
+
+			if buildingAllowed {
+				utils.setCursorHover(true)
+				overlay(OverlayCell { pointed, .2, rl.YELLOW })
+				overlay(OverlayGhost { pointed, selectedBuildingUnit, myColor() })
+
+				if clicked {
+					postponeClick(OrderAction {
+						unitId = selectedUnit.id,
+						order = {
+							target = pointed,
+							targetUnitType = selectedBuildingUnit,
+							type = .BUILD
+						}
+					})
+				}
+			}
+		case .ORDER_MOV:
+			allowedCells := hex.findWalkableOutline(
+				clientState.game.grid,
+				selectedUnit.position,
+				MOVING[selectedUnit.type],
+				context.temp_allocator
+			)
+			overlay(OverlayArea { allowedCells, rl.WHITE })
+			movingAllowed :=
+				pointed != selectedUnit.position &&
+				utils.includes(allowedCells, &pointed) &&
+				noOrdersAt(pointed, clientState.orders) &&
+				noUnitsAt(pointed, clientState.game.players[:])
+
+			if movingAllowed {
+				utils.setCursorHover(true)
+				path, _ := hex.findPath(clientState.game.grid, selectedUnit.position, pointed, context.temp_allocator)
+				overlay(OverlayPath { path, rl.BLUE })
+				overlay(OverlayCell { pointed, .2, rl.BLUE })
+
+				if clicked {
+					postponeClick(OrderAction {
+						unitId = selectedUnit.id,
+						order = {
+							target = pointed,
+							type = .MOVE
+						}
+					})
+				}
+			}
+		case .ORDER_DIG:
+			diggingAllowed :=
+				hex.distance(selectedUnit.position, pointed) == 1 &&
+				onGrid &&
+				pointedCell.gold > 0 &&
+				noOrdersAt(pointed, clientState.orders)
+
+			if diggingAllowed {
+				utils.setCursorHover(true)
+				overlay(OverlayCell { pointed, .2, rl.GOLD })
+
+				if clicked {
+					postponeClick(OrderAction {
+						unitId = selectedUnit.id,
+						order = {
+							target = pointed,
+							type = .DIG
+						}
+					})
+				}
+			}
+		case .ORDER_ATK:
+			attackAllowed :=
+				hex.distance(selectedUnit.position, pointed) <= ARANGE[selectedUnit.type]
+
+			if selectedUnit.type == .TONK {
+				attackAllowed &&=
+					hex.isVisible(clientState.game.grid, selectedUnit.position, pointed)
+			}
+
+			if attackAllowed {
+				indirekt := selectedUnit.type != .TONK
+				planShot(selectedUnit.position, pointed, indirekt)
+
+				if clicked {
+					postponeClick(OrderAction {
+						unitId = selectedUnit.id,
+						order = {
+							target = pointed,
+							type = indirekt ? .INDIREKT : .DIREKT
+						}
+					})
+				}
+			}
+	}
+}
+
+@(private="file")
+planShot :: proc(from: hex.Axial, to: hex.Axial, indirekt: bool) {
+	overlay(OverlayShot { from, to, rl.RED, indirekt })
+	if indirekt {
+		area := hex.nbs(to)
+		cells := make([]hex.Axial, len(area), context.temp_allocator)
+		copy(cells, area[:])
+		overlay(OverlayArea { cells, rl.RED })
+	} else {
+		overlay(OverlayCell { to, .2, rl.RED })
+	}
+}
+
+@(private)
+myColor :: proc() -> rl.Color {
+	if clientState.myPix < 0 || clientState.myPix >= len(clientState.game.players) do return rl.WHITE
+	return clientState.game.players[clientState.myPix].color
 }
 
 @(private)
@@ -201,170 +384,18 @@ clientDrawHUD :: proc() {
 	}
 
 	drawFragList()
+	drawSettingsPanel()
 
-	if clientState.status != .PLAYING {
-		selectedUnitId = NO_SELECTION
-		return
+	if clientState.status != .PLAYING do return
+
+	if getSelectedUnit() != nil {
+		#partial switch clientState.uiState {
+			case .FREE:      drawOrdersControl()
+			case .ORDER_BLD: drawBuildUnitsControl()
+		}
 	}
-
-	rl.BeginMode2D(ui.camera)
-	drawOrders(clientState.orders)
-	rl.EndMode2D()
-
-	if getSelectedUnit() != nil do drawOrdersPreview()
 
 	drawTurnControl()
-}
-
-drawOrdersPreview :: proc() {
-	selectedUnit := getSelectedUnit()
-	if selectedUnit == nil do return
-
-	switch clientState.uiState {
-		case .DISABLED:
-		case .FREE:
-			drawOrdersControl()
-		case .ORDER_BLD:
-			drawBuildUnitsControl()
-
-			gridRadius := clientState.game.grid.radius
-			pointedIndex := hex.axialToIndex(ui.pointedCell, gridRadius)
-			buildingAllowed :=
-				hex.distance(selectedUnit.position, ui.pointedCell) == 1 && 
-				hex.isWithinGrid(ui.pointedCell, gridRadius) && 
-				clientState.game.grid.cells[pointedIndex].value.walkable &&
-				noOrdersAt(ui.pointedCell, clientState.orders) &&
-				noUnitsAt(ui.pointedCell, clientState.game.players[:])
-
-			if buildingAllowed {
-				utils.setCursorHover(true)
-				rl.BeginMode2D(ui.camera)
-				ui.drawCellBorder(
-					ui.pointedCell,
-					.2,
-					rl.YELLOW
-				)
-				rl.EndMode2D()
-				
-				if rl.IsMouseButtonPressed(.LEFT) {
-					postponeClick(OrderAction {
-						unitId = selectedUnit.id,
-						order = {
-							target = ui.pointedCell,
-							targetUnitType = selectedBuildingUnit,
-							type = .BUILD
-						}
-					})
-				}
-			}
-		case .ORDER_MOV:
-			rl.BeginMode2D(ui.camera)
-			allowedCells := hex.findWalkableOutline(
-				clientState.game.grid,
-				selectedUnit.position,
-				MOVING[selectedUnit.type],
-				context.temp_allocator
-			)
-			ui.drawOutline(hex.outline(allowedCells, allocator = context.temp_allocator), rl.WHITE)
-			movingAllowed :=
-				ui.pointedCell != selectedUnit.position &&
-				utils.includes(allowedCells, &ui.pointedCell) &&
-				noOrdersAt(ui.pointedCell, clientState.orders) &&
-				noUnitsAt(ui.pointedCell, clientState.game.players[:])
-			
-			if movingAllowed {
-				utils.setCursorHover(true)
-				path, _ := hex.findPath(clientState.game.grid, selectedUnit.position, ui.pointedCell, context.temp_allocator)
-				if len(path) > 2 do ui.drawPath(path, .12, rl.BLUE, &stripeShader)
-				ui.drawCellBorder(
-					ui.pointedCell,
-					.2,
-					rl.BLUE
-				)
-
-				if rl.IsMouseButtonPressed(.LEFT) {
-					postponeClick(OrderAction {
-						unitId = selectedUnit.id,
-						order = {
-							target = ui.pointedCell,
-							type = .MOVE
-						}
-					})
-				}
-			}
-			rl.EndMode2D()
-		case .ORDER_DIG:
-			gridRadius := clientState.game.grid.radius
-			pointedIndex := hex.axialToIndex(ui.pointedCell, gridRadius)
-			diggingAllowed :=
-				hex.distance(selectedUnit.position, ui.pointedCell) == 1 && 
-				hex.isWithinGrid(ui.pointedCell, gridRadius) && 
-				clientState.game.grid.cells[pointedIndex].value.gold > 0 &&
-				noOrdersAt(ui.pointedCell, clientState.orders)
-
-			if diggingAllowed {
-				utils.setCursorHover(true)
-				rl.BeginMode2D(ui.camera)
-				ui.drawCellBorder(
-					ui.pointedCell,
-					.2,
-					rl.GOLD
-				)
-				rl.EndMode2D()
-
-				if rl.IsMouseButtonPressed(.LEFT) {
-					postponeClick(OrderAction {
-						unitId = selectedUnit.id,
-						order = {
-							target = ui.pointedCell,
-							type = .DIG
-						}
-					})
-				}
-			}
-		case .ORDER_ATK:
-			attackAllowed :=
-				hex.distance(selectedUnit.position, ui.pointedCell) <= ARANGE[selectedUnit.type]
-
-			if selectedUnit.type == .TONK {
-				attackAllowed &&=
-					hex.isVisible(clientState.game.grid, selectedUnit.position, ui.pointedCell)
-			}
-
-			if attackAllowed {
-				indirekt := selectedUnit.type != .TONK
-
-				rl.BeginMode2D(ui.camera)
-				ui.drawHexLine(
-					selectedUnit.position,
-					ui.pointedCell,
-					.12, rl.RED,
-					indirekt ? 1.5 : 0.5
-				)
-
-				if indirekt {
-					area := hex.nbs(ui.pointedCell)
-					lines := hex.outline(area[:], .2, context.temp_allocator)
-					ui.drawOutline(lines, rl.RED)
-				} else {
-					ui.drawCellBorder(
-						ui.pointedCell,
-						.2, rl.RED
-					)
-				}
-				rl.EndMode2D()
-
-				if rl.IsMouseButtonPressed(.LEFT) {
-					postponeClick(OrderAction {
-						unitId = selectedUnit.id,
-						order = {
-							target = ui.pointedCell,
-							type = selectedUnit.type == .TONK ? .DIREKT : .INDIREKT
-						}
-					})
-				}
-			}
-	}
 }
 
 createOrder :: proc(unitId: int, order: Order) {
@@ -374,49 +405,27 @@ createOrder :: proc(unitId: int, order: Order) {
 	selectedUnitId = NO_SELECTION
 }
 
-drawOrders :: proc(orders: OrderSet) {
+@(private="file")
+planOrders :: proc(orders: OrderSet) {
 	for unitId, order in orders {
 		if selectedUnitId == unitId && clientState.uiState != .FREE do continue
 		unit, ok := findUnitById(clientState.game.players[clientState.myPix].units[:], unitId)
 		if !ok do continue
-		
+
 		switch order.type {
 			case .BUILD:
-				ui.drawCellBorder(
-					order.target,
-					.2, rl.DARKGRAY
-				)
+				overlay(OverlayCell { order.target, .2, rl.DARKGRAY })
+				overlay(OverlayGhost { order.target, order.targetUnitType, myColor() })
 			case .DIG:
-				ui.drawCellBorder(
-					order.target,
-					.2, rl.GOLD
-				)
+				overlay(OverlayCell { order.target, .2, rl.GOLD })
 			case .DIREKT:
-				ui.drawHexLine(
-					unit.position,
-					order.target,
-					.12, rl.RED
-				)
-				ui.drawCellBorder(
-					order.target,
-					.2, rl.RED
-				)
+				planShot(unit.position, order.target, false)
 			case .INDIREKT:
-				ui.drawHexLine(
-					unit.position,
-					order.target,
-					.12, rl.RED, 1.5
-				)
-				area := hex.nbs(order.target)
-				lines := hex.outline(area[:], .2, context.temp_allocator)
-				ui.drawOutline(lines, rl.RED)
+				planShot(unit.position, order.target, true)
 			case .MOVE:
 				path, _ := hex.findPath(clientState.game.grid, unit.position, order.target, context.temp_allocator)
-				if len(path) > 2 do ui.drawPath(path, .12, rl.BLUE, &stripeShader)
-				ui.drawCellBorder(
-					order.target,
-					.2, rl.BLUE
-				)
+				overlay(OverlayPath { path, rl.BLUE })
+				overlay(OverlayCell { order.target, .2, rl.BLUE })
 		}
 	}
 }

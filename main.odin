@@ -24,7 +24,9 @@ main :: proc () {
 				config.client.lobbyEnabled,
 				lobbyAddress,
 				config.common.lobbyPort,
-				config.common.lobbyToken
+				config.common.lobbyToken,
+				config.client.renderer3D,
+				config.client.rendererFromCommandLine
 			)
 		case .server:
 			game.server(

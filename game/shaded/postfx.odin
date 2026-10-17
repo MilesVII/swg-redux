@@ -6,13 +6,21 @@ PostFXState :: struct {
 	windowSize: [2]f32,
 	elapsedTime: f32,
 	oddFrame: bool,
+	// 0 shows the original image, 1 the full effect
+	intensity: f32,
+	// interference, blur, scanlines
+	distortion: f32,
+	// color shifts and smearing
+	decoloration: f32,
+	// size of a virtual CRT pixel, 1 keeps the look of a 640x480 window at any size
+	pixelScale: f32,
 }
 
 PostFXShader :: Shader(PostFXState)
 
 createPostFXShader :: proc() -> PostFXShader {
 	shader := rl.LoadShader("shaders/default-vs.glsl", "shaders/postfx-fs.glsl")
-	state: PostFXState
+	state := PostFXState { intensity = 1, distortion = 1, decoloration = 1, pixelScale = 1 }
 
 	return Shader(PostFXState){ shader, state }
 }
@@ -47,6 +55,14 @@ updatePostFXShader :: proc(shader: ^PostFXShader) {
 		&oddFrame,
 		.INT
 	)
+	setFloat :: proc(shader: rl.Shader, name: cstring, value: f32) {
+		value := value
+		rl.SetShaderValue(shader, rl.GetShaderLocation(shader, name), &value, .FLOAT)
+	}
+	setFloat(shader.shader, "intensity", shaderState.intensity)
+	setFloat(shader.shader, "distortion", shaderState.distortion)
+	setFloat(shader.shader, "decoloration", shaderState.decoloration)
+	setFloat(shader.shader, "pixelScale", shaderState.pixelScale)
 }
 
 deletePostFXShader :: proc(shader: PostFXShader) {

@@ -94,8 +94,12 @@ onResize :: proc() {
 	rtLoaded = true
 }
 
-updateIO :: proc(cameraLocked: bool) {
+updateWindow :: proc() {
 	if rl.IsWindowResized() do onResize()
+}
+
+// 2D camera controls and pointer picking
+update2DCamera :: proc(cameraLocked: bool) {
 	pointer = rl.GetScreenToWorld2D(rl.GetMousePosition(), camera)
 	pointedCell = hex.worldToAxial(pointer)
 
@@ -128,25 +132,14 @@ updateIO :: proc(cameraLocked: bool) {
 	camera.offset += cameraDelta + keyboardDelta
 }
 
-draw :: proc(
-	world: proc(),
+// renders scene and hud into the offscreen target, applies post effects and presents
+drawFrame :: proc(
+	scene: proc(),
 	hud: proc(),
-	pfx: proc(tex: rl.RenderTexture2D),
-	background: Maybe(proc()) = nil
+	pfx: proc(tex: rl.RenderTexture2D)
 ) {
-	utils.cursorHoverBegin()
-	defer utils.cursorHoverEnd()
-
 	rl.BeginTextureMode(rt)
-		rl.BeginMode2D(camera)
-
-		back, backSet := background.?
-		if backSet do back()
-
-		world()
-
-		rl.EndMode2D()
-
+		scene()
 		hud()
 	rl.EndTextureMode()
 
@@ -422,4 +415,12 @@ buttonRow :: proc(
 		)
 		utils.setCursorHover(hovered)
 	}
+}
+
+// writes the last presented frame to an image file
+saveFrame :: proc(path: cstring) {
+	image := rl.LoadImageFromTexture(rt.texture)
+	rl.ImageFlipVertical(&image)
+	rl.ExportImage(image, path)
+	rl.UnloadImage(image)
 }

@@ -16,6 +16,7 @@ Mode :: enum { client, server, lobby, debug }
 Options :: struct {
 	mode: string,
 	name: string,
+	renderer: string,
 	managed: bool,
 	players: int,
 	radius: int,
@@ -39,7 +40,10 @@ Config :: struct {
 		server: net.Address,
 		framerate: int,
 		lobby: net.Address,
-		lobbyEnabled: bool
+		lobbyEnabled: bool,
+		renderer3D: bool,
+		// --renderer was given, it wins over saved settings
+		rendererFromCommandLine: bool
 	},
 	server: struct {
 		players: int,
@@ -65,7 +69,8 @@ DEFAULT_CONFIG := Config {
 		framerate = 120,
 		server = net.IP4_Loopback,
 		lobby = net.IP4_Loopback,
-		lobbyEnabled = false
+		lobbyEnabled = false,
+		renderer3D = false
 	},
 	server = {
 		players = 2,
@@ -95,6 +100,13 @@ config :: proc() -> Config {
 		else do fmt.println("unknown mode:", options.mode)
 	}
 	if len(options.name) > 0 do config.client.name = options.name
+	if len(options.renderer) > 0 {
+		renderer3D, rendererOk := rendererStringTo3D(options.renderer)
+		if rendererOk {
+			config.client.renderer3D = renderer3D
+			config.client.rendererFromCommandLine = true
+		} else do fmt.println("unknown renderer:", options.renderer)
+	}
 	if options.port != 0 do config.common.port = options.port
 	if config.common.mode == .server && options.managed {
 		config.server.managed = true
@@ -151,6 +163,13 @@ readFileConfig :: proc(filename: string, config: ^Config) {
 
 		framerate, framerateFound := toml.get(i64, clientTable, "framerate_cap")
 		if framerateFound do config.client.framerate = int(framerate)
+
+		renderer, rendererFound := toml.get(string, clientTable, "renderer")
+		if rendererFound {
+			renderer3D, rendererOk := rendererStringTo3D(renderer)
+			if rendererOk do config.client.renderer3D = renderer3D
+			else do fmt.println("unknown renderer in config:", renderer)
+		}
 		
 		lobbyAddress, lobbyAddressFound := toml.get(string, clientTable, "lobby")
 		if lobbyAddressFound {
@@ -195,6 +214,15 @@ modeStringToMode :: proc(mode: string) -> (Mode, bool) {
 		case "debug": return .debug, true
 	}
 	return .client, false
+}
+
+@(private="file")
+rendererStringTo3D :: proc(renderer: string) -> (is3D: bool, ok: bool) {
+	switch renderer {
+		case "2d", "2D": return false, true
+		case "3d", "3D": return true, true
+	}
+	return false, false
 }
 
 @(private="file")

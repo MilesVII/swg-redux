@@ -5,6 +5,14 @@ uniform sampler2D texture0;
 uniform vec2 windowSize;
 uniform float elapsedTime;
 uniform int oddFrame;
+// 0 passes the image through, 1 applies the full effect
+uniform float intensity;
+// interference, blur, scanlines and luma ripple
+uniform float distortion;
+// hue shift, chroma smear, desaturation and chroma ripple
+uniform float decoloration;
+// size of a virtual CRT pixel relative to the reference look
+uniform float pixelScale;
 
 out vec4 fragColor;
 
@@ -23,8 +31,11 @@ out vec4 fragColor;
 #define INTERFERENCE2 0.003 //bottom gore
 #define SCAN_DEFECT 0.2
 
-const float XRES = 432.0;
-const float YRES = 264.0;
+// the virtual resolution follows the window: this many screen pixels per CRT pixel,
+// matching the original 432x264 grid at a 640x480 window
+const vec2 REFERENCE_PIXEL = vec2(640.0 / 432.0, 480.0 / 264.0);
+float XRES;
+float YRES;
 
 // RGB -> YIQ
 const mat3 yiq_mat = mat3(
@@ -64,6 +75,11 @@ vec3 get(vec2 uv, float off, float d, float yscale) {
 }
 
 void main() {
+	vec2 virtualResolution = max(windowSize / (REFERENCE_PIXEL * max(pixelScale, 0.1)), vec2(1.0));
+	XRES = virtualResolution.x;
+	YRES = virtualResolution.y;
+	float pixelX = REFERENCE_PIXEL.x * max(pixelScale, 0.1);
+
 	vec2 uv = gl_FragCoord.xy / windowSize.xy;
 	float scany = round(uv.y * YRES);
 
@@ -77,7 +93,7 @@ void main() {
 	float lchromaEnc = length(chroma);
 	float phaseEnc = atan(signalEnc.y, signalEnc.z);
 
-	phaseEnc += -0.3926991 + mscanl * 0.19634954; // line phase shift (22.5 deg)
+	phaseEnc += (-0.3926991 + mscanl * 0.19634954) * decoloration; // line phase shift (22.5 deg)
 
 	vec3 ntscSignal = vec3(signalEnc.x, lchromaEnc, phaseEnc / (2.0 * PI)); // final encoded signal
 
@@ -86,10 +102,12 @@ void main() {
 
 	float r = random(vec2(0.0, scany), elapsedTime);
 	if (r > 0.995) r *= 3.0;
-	float ifx1 = INTERFERENCE1 * 2.0 / windowSize.x * r;
-	float ifx2 = INTERFERENCE2 * (r * peak(uv.y, 0.2, 0.2));
+	float ifx1 = INTERFERENCE1 * distortion * 2.0 * pixelX / windowSize.x * r;
+	float ifx2 = INTERFERENCE2 * distortion * (r * peak(uv.y, 0.2, 0.2));
 	uv.x += ifx1 - ifx2;
 
+	float blur = BLUR * distortion;
+	float chromaBlur = CHROMABLUR * decoloration;
 	float d = 1.0 / XRES * (BLURSIZE + ifx2 * 100.0);
 	vec3 lsignal = vec3(0.0);
 	vec3 csignal = vec3(0.0);
@@ -106,12 +124,12 @@ void main() {
 
 	vec3 lumat = ntscSignal * vec3(1.0, 0.0, 0.0);
 	vec3 chroat = ntscSignal * vec3(0.0, 1.0, 1.0);
-	vec3 signal = lumat * (1.0 - BLUR) + BLUR * lsignal + chroat * (1.0 - CHROMABLUR) + CHROMABLUR * csignal;
+	vec3 signal = lumat * (1.0 - blur) + blur * lsignal + chroat * (1.0 - chromaBlur) + chromaBlur * csignal;
 
 	float scanl = 0.5 + 0.5 * abs(sin(PI * uv.y * YRES));
-	scanl = mix(1.0, scanl, SCAN_DEFECT);
+	scanl = mix(1.0, scanl, SCAN_DEFECT * distortion);
 
-	float lchroma = signal.y * SATURATION;
+	float lchroma = signal.y * mix(1.0, SATURATION, decoloration);
 	float phase = signal.z * 2.0 * PI;
 
 	signal.x *= BRIGHTNESS;
@@ -125,10 +143,11 @@ void main() {
 	float i_mod = cos(mod_phase);
 	float q_mod = sin(mod_phase);
 
-	signal.x *= CROSSTALK * scarrier * q_mod + 1.0 - ifx2 * 30.0;
-	signal.y *= scarrier * i_mod + 1.0;
-	signal.z *= scarrier * q_mod + 1.0;
+	signal.x *= CROSSTALK * scarrier * distortion * q_mod + 1.0 - ifx2 * 30.0;
+	signal.y *= scarrier * decoloration * i_mod + 1.0;
+	signal.z *= scarrier * decoloration * q_mod + 1.0;
 
 	vec3 out_color = scanl * (yiq2rgb_mat * signal);
-	fragColor = vec4(out_color, 1.0);
+	vec3 original = texture(texture0, gl_FragCoord.xy / windowSize.xy).rgb;
+	fragColor = vec4(mix(original, out_color, intensity), 1.0);
 }

@@ -119,7 +119,8 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> (GameSta
 	}
 
 	for &cell in state.grid.cells {
-		hi := hex.height(cell.position.world, HEIGHTS, seed)
+		elevation := hex.elevation(cell.position.world, seed)
+		hi := hex.heightLevel(elevation, HEIGHTS)
 		color := colors[hi]
 		goldCell := color == rl.YELLOW
 
@@ -128,7 +129,8 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> (GameSta
 			walkable = hi < 8 && hi > 2,
 			seethrough = hi < 8,
 			fog = .FOG,
-			gold = goldCell ? 1 : 0
+			gold = goldCell ? 1 : 0,
+			elevation = elevation
 		}
 	}
 	hex.markWalkableAreas(state.grid)

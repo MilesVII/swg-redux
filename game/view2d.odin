@@ -1,0 +1,100 @@
+package game
+
+import rl "vendor:raylib"
+
+import "ui"
+import "hex"
+import "shaded"
+
+// the original top-down renderer
+VIEW_2D := ClientView {
+	name = "2D",
+	update = proc(cameraLocked: bool, inputBlocked: bool) {
+		ui.update2DCamera(cameraLocked || inputBlocked)
+	},
+	scene = scene2D,
+	focus = proc(at: hex.Axial) {
+		ui.camera.target = hex.axialToWorld(at)
+	},
+	toScreen = proc(at: hex.Axial) -> rl.Vector2 {
+		return rl.GetWorldToScreen2D(hex.axialToWorld(at), ui.camera)
+	},
+}
+
+@(private="file")
+scene2D :: proc() {
+	rl.BeginMode2D(ui.camera)
+	defer rl.EndMode2D()
+
+	drawBackground2D()
+	if clientState.status == .CONNECTING do return
+
+	ui.drawGrid(clientState.game.grid)
+
+	cell, hovering := hoverCell.?
+	if hovering do ui.drawCellBorder(cell, .2, rl.WHITE)
+
+	for &player, pix in clientState.game.players {
+		for &unit in player.units {
+			ordered := unit.id in clientState.orders
+			highlight := clientState.status == .PLAYING && pix == clientState.myPix && !ordered
+			drawUnit(
+				unit.position,
+				unit.type,
+				unit.gold,
+				player.color,
+				highlight
+			)
+		}
+	}
+
+	if clientUpdateAnimationsPending {
+		for bonk in clientState.explosions {
+			if bonk.elapsedTime == 0 do continue
+			ui.drawExplosion(bonk.at, bonk.elapsedTime / (EXPLOSION_HATTRICK_S * 2.0), &sweepShader)
+		}
+	}
+
+	drawOverlays2D()
+}
+
+@(private="file")
+drawBackground2D :: proc() {
+	rl.ClearBackground(rl.RAYWHITE)
+	shaded.updateBackgroundShader(&backgroundShader, ui.camera.offset, ui.camera.zoom)
+	rl.BeginShaderMode(backgroundShader.shader)
+
+	from := rl.GetScreenToWorld2D([2]f32 {0, 0}, ui.camera)
+	to := rl.GetScreenToWorld2D(ui.windowSizeF(), ui.camera)
+
+	rl.DrawRectanglePro(
+		rl.Rectangle {
+			x = from.x,
+			y = from.y,
+			width = to.x - from.x,
+			height = to.y - from.y
+		},
+		rl.Vector2 {0, 0},
+		0,
+		rl.WHITE
+	)
+	rl.EndShaderMode()
+}
+
+@(private="file")
+drawOverlays2D :: proc() {
+	for command in overlays {
+		switch c in command {
+			case OverlayCell:
+				ui.drawCellBorder(c.at, c.thickness, c.color)
+			case OverlayArea:
+				ui.drawOutline(hex.outline(c.cells, allocator = context.temp_allocator), c.color)
+			case OverlayPath:
+				if len(c.path) > 2 do ui.drawPath(c.path, .12, c.color, &stripeShader)
+			case OverlayShot:
+				ui.drawHexLine(c.from, c.to, .12, c.color, c.indirekt ? 1.5 : 0.5)
+			case OverlayGhost:
+				// the build target border is enough in 2D
+		}
+	}
+}

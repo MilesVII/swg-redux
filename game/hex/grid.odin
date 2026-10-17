@@ -53,7 +53,9 @@ GridCell :: struct {
 	seethrough: bool,
 	mainArea: bool,
 	fog: Fog,
-	gold: int
+	gold: int,
+	// continuous height behind the terrain type, 0 for unexplored cells
+	elevation: f32
 }
 
 grid :: proc(radius: int, $Value: typeid) -> Grid(Value) {
