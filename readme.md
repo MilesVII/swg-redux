@@ -23,7 +23,11 @@ Clients can connect to lobbies instead of connecting to a server directly right 
 
 Refer to `config.toml.example` for config details
 
-## Controls
+## Rules and Controls
+`MCV` can `dig` gold from adjacent tiles, `move`, and `build` new units, each costing 1 gold. sees far, no shoot.
+`GUN` is a static emplacement. can `indirekt fire` far, attacking three random tiles within radius. no move, can't see.
+`TONK` can `move`, and can `direkt fire`, attacking selected tile within range. can withstand an extra hit, medium move, medium see.
+
 > [!IMPORTANT]
 > Set up an unique user name in config.toml before connecting to a server
 
