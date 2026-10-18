@@ -311,24 +311,47 @@ drawShape :: proc(type: GameUnitType, pose: Pose, scale: f32, color: rl.Color, c
 	}
 }
 
-// gold of MCVs, hit points of TONKs, as little blocks floating above
+// slots of the bars above units: gold for MCVs, hit points for TONKs
 @(private="file")
-drawGoldMarks :: proc(v: UnitVisual, position: rl.Vector3, coverage: f32) {
-	if v.gold <= 0 || v.gold > 3 do return
-	if v.type == .GUN do return
+BAR_CAPACITY := [GameUnitType]int { .TONK = 2, .GUN = 0, .MCV = 3 }
+@(private="file")
+BAR_COLOR := [GameUnitType]rl.Color { .TONK = rl.RED, .GUN = rl.BLANK, .MCV = rl.GOLD }
 
-	right := rl.Vector3Normalize(rl.Vector3CrossProduct(camera3D.target - camera3D.position, camera3D.up))
-	color := v.type == .TONK ? rl.RED : rl.GOLD
-	material := units.material
-	material.maps[rl.MaterialMapIndex.ALBEDO].color = color
-	setUnitUniforms(coverage, .35)
+// screen space bars above units, drawn with the HUD
+drawUnitBars3D :: proc() {
+	SEGMENT_WIDTH :: f32(11)
+	SEGMENT_HEIGHT :: f32(5)
+	GAP :: f32(2)
+	PADDING :: f32(2)
 
-	base := position + { 0, UNIT_HEIGHT[v.type] + .12, 0 }
-	for i in 0..<v.gold {
-		offset := (f32(i) - f32(v.gold - 1) * .5) * .13
-		p := base + right * offset
-		transform := rl.MatrixTranslate(p.x, p.y, p.z) * rl.MatrixScale(.07, .07, .07)
-		rl.DrawMesh(units.cube, material, transform)
+	forward := rl.Vector3Normalize(camera3D.target - camera3D.position)
+	for _, v in units.visuals {
+		capacity := BAR_CAPACITY[v.type]
+		if capacity == 0 do continue
+		coverage := coverageOf(v)
+		if coverage <= 0 do continue
+
+		pose := poseOf(v)
+		anchor := pose.position + { 0, UNIT_HEIGHT[v.type] + .12, 0 }
+		if rl.Vector3DotProduct(anchor - camera3D.position, forward) <= 0 do continue
+		screen := rl.GetWorldToScreen(anchor, camera3D)
+
+		width := f32(capacity) * SEGMENT_WIDTH + f32(capacity - 1) * GAP
+		x := math.round(screen.x - width * .5)
+		y := math.round(screen.y - SEGMENT_HEIGHT)
+		alpha := u8(255 * coverage)
+
+		rl.DrawRectangleRec(
+			{ x - PADDING, y - PADDING, width + PADDING * 2, SEGMENT_HEIGHT + PADDING * 2 },
+			{ 0, 0, 0, u8(190 * coverage) }
+		)
+		filled := BAR_COLOR[v.type]
+		filled.a = alpha
+		empty := rl.Color { 70, 70, 70, alpha }
+		for i in 0..<capacity {
+			segment := rl.Rectangle { x + f32(i) * (SEGMENT_WIDTH + GAP), y, SEGMENT_WIDTH, SEGMENT_HEIGHT }
+			rl.DrawRectangleRec(segment, i < v.gold ? filled : empty)
+		}
 	}
 }
 
@@ -341,7 +364,6 @@ drawUnits3D :: proc() {
 		pose := poseOf(v)
 		hovered := v.cell == ui.pointedCell && !v.fadingOut
 		drawShape(v.type, pose, hovered ? 1.12 : 1, v.color, coverage, 0)
-		drawGoldMarks(v, pose.position, coverage)
 	}
 
 	// units that orders will build

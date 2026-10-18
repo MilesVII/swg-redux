@@ -1,7 +1,5 @@
 package game
 
-import rl "vendor:raylib"
-
 import "core:fmt"
 import "core:time"
 import "core:net"
@@ -24,7 +22,9 @@ NAME_PLACEHOLDER :: "NAMELESS"
 Player :: struct {
 	id: Maybe(string),
 	online: bool,
-	socket: net.TCP_Socket
+	socket: net.TCP_Socket,
+	// cell values the player has, updates only carry what changed since; nil sends the whole map
+	sentCells: []hex.GridCell
 }
 
 @(private="file")
@@ -34,29 +34,6 @@ Session :: struct {
 	game: GameState,
 	over: bool,
 	managed: bool
-}
-
-TurnMessage :: struct {
-	activePlayer: int,
-	activeIsYou: bool,
-	currentPlayerBadge: string,
-	yourColor: rl.Color,
-	yourId: int
-}
-Update :: struct {
-	gameState: GameState,
-	meta: TurnMessage,
-	explosions: []ExplosionBufferEntry,
-	gameStarted: bool,
-	gameOver: bool,
-	// empty if nobody survived
-	winnerBadge: string
-}
-
-ExplosionBufferEntry :: struct {
-	position: hex.Axial,
-	pix: int,
-	lethal: bool
 }
 
 @(private="file")
@@ -140,7 +117,13 @@ processPackage :: proc(p: networking.Package) {
 			networking.hang(p.socket)
 		case .JOIN:
 			if onJoin(playerName, p.socket) do startGameIfFull()
-		case .UPDATE: //ignored
+		case .UPDATE:
+			// the client lost track of the map, start over with a full one
+			for &player, playerIndex in session.players {
+				if !player.online || player.socket != p.socket do continue
+				forgetSentCells(&player)
+				sendUpdate(p.socket, playerIndex)
+			}
 		case .ORDERS:
 			if session.activePlayerIx < 0 || session.over do break
 			active := session.players[session.activePlayerIx]
@@ -177,6 +160,8 @@ onJoin :: proc(player: string, socket: net.TCP_Socket) -> bool {
 				// the old connection's DISCONNECTED will close it
 				networking.kick(p.socket)
 			}
+			// a new connection knows nothing about the map
+			forgetSentCells(&p)
 			p.socket = socket
 			p.online = true
 			freeSlot = index
@@ -258,6 +243,12 @@ sendNotice :: proc(socket: net.TCP_Socket, notice: string) {
 }
 
 @(private="file")
+forgetSentCells :: proc(player: ^Player) {
+	delete(player.sentCells)
+	player.sentCells = nil
+}
+
+@(private="file")
 sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	header := networking.MessageHeader {
 		message = .UPDATE,
@@ -269,8 +260,29 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	explosions := reduceExplosionsToVisible(&visibleState, playerIndex, explosionsBuffer[:])
 	defer delete(explosions)
 
+	player := &session.players[playerIndex]
+	cells := reducedState.grid.cells
+	fullGrid := player.sentCells == nil || len(player.sentCells) != len(cells)
+	packedCells := packCellChanges(cells, fullGrid ? nil : player.sentCells)
+	defer delete(packedCells)
+
+	if fullGrid {
+		delete(player.sentCells)
+		player.sentCells = make([]hex.GridCell, len(cells))
+	}
+	for cell, i in cells do player.sentCells[i] = cell.value
+
+	// units only, explored cells of other players are none of the receiver's business
+	players := make([]PlayerState, len(reducedState.players), context.temp_allocator)
+	for p, i in reducedState.players {
+		players[i] = PlayerState { color = p.color, units = p.units, unitIdCounter = p.unitIdCounter }
+	}
+
 	update := Update {
-		gameState = reducedState,
+		radius = reducedState.grid.radius,
+		fullGrid = fullGrid,
+		cells = packedCells,
+		players = players,
 		meta = {
 			activePlayer = session.activePlayerIx,
 			activeIsYou = playerIndex == session.activePlayerIx,

@@ -356,6 +356,8 @@ clientDrawHUD :: proc() {
 		return "", rl.WHITE
 	}
 
+	if activeView.hud != nil do activeView.hud()
+
 	status, statusColor := getStatusString()
 	rl.DrawTextEx(
 		vcrFont,

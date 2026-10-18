@@ -25,6 +25,9 @@ VIEW_3D := ClientView {
 	onExplosionStart = explosionStart3D,
 	onExplosionImpact = explosionImpact3D,
 	settings = settings3D,
+	hud = proc() {
+		if clientState.status != .CONNECTING do drawUnitBars3D()
+	},
 }
 
 // "true isometric" elevation: atan(1 / sqrt(2))

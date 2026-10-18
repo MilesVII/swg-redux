@@ -47,7 +47,8 @@ GameUnit :: struct {
 PlayerState :: struct {
 	color: rl.Color,
 	units: [dynamic]GameUnit,
-	knownTerrain: [dynamic]hex.Axial,
+	// per grid cell, whether the player has ever seen it; server only
+	knownTerrain: []bool,
 	unitIdCounter: int
 }
 
@@ -157,7 +158,7 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> (GameSta
 		player = PlayerState {
 			color = PLAYER_COLORS[i],
 			units = slice.clone_to_dynamic(units),
-			knownTerrain = make([dynamic]hex.Axial),
+			knownTerrain = make([]bool, len(state.grid.cells)),
 			unitIdCounter = 1
 		}
 	}
@@ -168,10 +169,10 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> (GameSta
 getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 	player := &state.players[playerIndex]
 	reducedState := cloneState(state^)
-	for &cell in reducedState.grid.cells {
+	for &cell, cellIndex in reducedState.grid.cells {
 		if !cell.visible do continue
 
-		known := utils.includes(&player.knownTerrain, &cell.position.axial)
+		known := player.knownTerrain[cellIndex]
 		fallbackFogValue := known ? hex.Fog.TERRAIN : hex.Fog.FOG
 
 		observedByUint := false
@@ -187,7 +188,7 @@ getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 
 		if observedByUint {
 			cell.value.fog = .OBSERVED
-			if !known do append(&player.knownTerrain, cell.position.axial)
+			player.knownTerrain[cellIndex] = true
 		} else {
 			cell.value.walkable = false
 			if fallbackFogValue == .FOG {
@@ -266,7 +267,7 @@ cloneState :: proc(state: GameState) -> GameState {
 
 	for &p in newState.players {
 		p.units = slice.clone_to_dynamic(p.units[:])
-		p.knownTerrain = slice.clone_to_dynamic(p.knownTerrain[:])
+		p.knownTerrain = slice.clone(p.knownTerrain)
 	}
 	newState.grid.cells = slice.clone(state.grid.cells)
 

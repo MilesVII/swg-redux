@@ -101,6 +101,9 @@ clientState := ClientState {
 // latest update from the server, applied once its explosions finish playing
 @(private)
 clientUpdateBuffer: Update
+// the state that update describes, its grid built on top of the previously received one
+@(private)
+clientPendingState: GameState
 @(private)
 clientUpdateAnimationsPending: bool = false
 @(private)
@@ -419,13 +422,26 @@ onUpdate :: proc(payload: []u8) {
 		clientState.fragCounterTTS = 0
 	}
 
-	// everything owned by the buffer was handed over by applyBufferedUpdate
-	clientUpdateBuffer = {}
+	// what applyBufferedUpdate didn't take over
+	deleteUpdate(&clientUpdateBuffer)
 	if !decode(payload, &clientUpdateBuffer) {
-		deleteState(clientUpdateBuffer.gameState)
-		clientUpdateBuffer = {}
+		deleteUpdate(&clientUpdateBuffer)
 		return
 	}
+
+	// the last received grid is the one shown now, pending animations were just applied
+	grid, gridOk := buildGrid(clientState.game.grid, clientUpdateBuffer)
+	if !gridOk {
+		// out of sync, ask for the whole map and wait for it
+		header := networking.MessageHeader { message = .UPDATE, me = utils.stringToBadge(clientState.name) }
+		networking.say(clientState.serverSocket, &header)
+		deleteUpdate(&clientUpdateBuffer)
+		return
+	}
+	clientPendingState = GameState { players = clientUpdateBuffer.players, grid = grid }
+	clientUpdateBuffer.players = nil
+	delete(clientUpdateBuffer.cells)
+	clientUpdateBuffer.cells = nil
 	defer {
 		delete(clientUpdateBuffer.explosions)
 		clientUpdateBuffer.explosions = nil
@@ -472,8 +488,8 @@ onUpdate :: proc(payload: []u8) {
 @(private="file")
 applyBufferedUpdate :: proc() {
 	deleteState(clientState.game)
-	clientState.game = clientUpdateBuffer.gameState
-	clientUpdateBuffer.gameState = {}
+	clientState.game = clientPendingState
+	clientPendingState = {}
 	clientStateVersion += 1
 
 	delete(clientState.activePlayerName)

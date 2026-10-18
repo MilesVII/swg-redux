@@ -26,6 +26,8 @@ ClientView :: struct {
 	onExplosionImpact: proc(bonk: Explosion),
 	// extra rows for the settings panel
 	settings: proc(layout: ^SettingsLayout),
+	// screen space parts of the world, drawn under the rest of the HUD
+	hud: proc(),
 }
 
 CLIENT_VIEWS := [?]^ClientView { &VIEW_2D, &VIEW_3D }
