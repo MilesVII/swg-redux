@@ -47,6 +47,7 @@ Refer to `config.toml.example` for config details
 - `Z/X/C/V` to pick order types
 - `Enter` to submit orders
 - `Esc` to abort current order placement
+- `F1` to open settings menu
 
 #### 2D camera
 - `WASD` or click and drag to pan camera
