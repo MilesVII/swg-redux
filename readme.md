@@ -68,6 +68,7 @@ The 3D renderer draws placeholder boxes unless it finds `assets/models/mcv`, `to
 - [toml_parser](https://github.com/Up05/toml_parser)
 - Post effects shader by [@BitOfGold](https://www.shadertoy.com/view/3tVBWR)
 - VCR OSD Mono by [Riciery Leal aka mrmanet](https://www.dafont.com/vcr-osd-mono.font)
+- 3D renderer and rehaul by Claude
 
 Sounds from [(freesound.org)](https://freesound.org/), original posts can be found by id
 - 425728__moogy73__click01.wav
