@@ -4,6 +4,7 @@ import "core:time"
 import "core:fmt"
 import "core:net"
 import os "core:os/os2"
+import oldos "core:os"
 import synchan "core:sync/chan"
 
 import "networking"
@@ -58,6 +59,21 @@ LOBBY_IDLE_SKIP := time.Millisecond * 100
 LOBBY_SIGNAL_READY := u8(0)
 LOBBY_SIGNAL_FULL := u8(1)
 LOBBY_SIGNAL_TERMINATE := u8(2)
+
+// a managed server's stdout is the pipe the lobby reads signals from,
+// so stray prints could pass for signals
+@(private="file")
+lobbySignalOutput: oldos.Handle
+
+// keeps stdout for signals only and points everything printed at stderr instead
+reserveStdoutForLobby :: proc() {
+	lobbySignalOutput = oldos.stdout
+	oldos.stdout = oldos.stderr
+}
+
+signalLobby :: proc(signal: u8) {
+	oldos.write(lobbySignalOutput, { signal })
+}
 
 lobby :: proc(portRange: [2]int, local: bool, port: int, authToken: [64]rune) {
 	// TODO: persist sessions in file

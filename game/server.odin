@@ -3,7 +3,6 @@ package game
 import "core:fmt"
 import "core:time"
 import "core:net"
-import "core:os"
 import "core:slice"
 import synchan "core:sync/chan"
 
@@ -72,7 +71,7 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, lo
 		if err == .OK do break
 		else if gameInitRetries == 0 || mapSeed != -1 {
 			utils.log("failed to create a game, aborting")
-			if session.managed do os.write(os.stdout, { LOBBY_SIGNAL_TERMINATE })
+			if session.managed do signalLobby(LOBBY_SIGNAL_TERMINATE)
 			return
 		}
 		gameInitRetries -= 1
@@ -80,7 +79,7 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, lo
 	}
 
 	utils.log("session created, listening")
-	if session.managed do os.write(os.stdout, { LOBBY_SIGNAL_READY })
+	if session.managed do signalLobby(LOBBY_SIGNAL_READY)
 
 	networking.startAccepting(receptionSocket)
 
@@ -204,7 +203,7 @@ startGameIfFull :: proc() {
 	// reconnects into a running game must not reset the turn
 	if gameStarted() || !gameFull() do return
 
-	if session.managed do os.write(os.stdout, { LOBBY_SIGNAL_FULL })
+	if session.managed do signalLobby(LOBBY_SIGNAL_FULL)
 	session.activePlayerIx = 0
 	broadcastUpdates()
 }

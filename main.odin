@@ -1,10 +1,20 @@
 package main
 
 import "core:net"
+import "core:os"
+import "core:strings"
 
 import "game"
 
 main :: proc () {
+	// before anything prints, see game.reserveStdoutForLobby
+	for arg in os.args[1:] {
+		if strings.has_prefix(arg, "--managed") || strings.has_prefix(arg, "-managed") {
+			game.reserveStdoutForLobby()
+			break
+		}
+	}
+
 	config := config()
 	switch config.common.mode {
 		case .client: 
