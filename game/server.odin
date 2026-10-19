@@ -32,7 +32,9 @@ Session :: struct {
 	players: []Player,
 	game: GameState,
 	over: bool,
-	managed: bool
+	managed: bool,
+	// set once the game is over and everyone left, ends the main loop
+	closing: bool
 }
 
 @(private="file")
@@ -83,7 +85,7 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, lo
 
 	networking.startAccepting(receptionSocket)
 
-	for {
+	for !session.closing {
 		for synchan.can_recv(networking.rx) {
 			data, ok := synchan.recv(networking.rx)
 			if ok do processPackage(data)
@@ -91,6 +93,7 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, lo
 		free_all(context.temp_allocator)
 		time.sleep(SERVER_IDLE_SKIP)
 	}
+	utils.log("game over and everyone left, shutting down")
 }
 
 @(private="file")
@@ -114,6 +117,11 @@ processPackage :: proc(p: networking.Package) {
 				}
 			}
 			networking.hang(p.socket)
+			// a finished game has nothing left to serve once its last player is gone
+			if session.over && !anyPlayerOnline() {
+				if session.managed do signalLobby(LOBBY_SIGNAL_TERMINATE)
+				session.closing = true
+			}
 		case .JOIN:
 			if onJoin(playerName, p.socket) do startGameIfFull()
 		case .UPDATE:
@@ -187,6 +195,12 @@ onJoin :: proc(player: string, socket: net.TCP_Socket) -> bool {
 
 	sendUpdate(socket, freeSlot)
 	return true
+}
+
+@(private="file")
+anyPlayerOnline :: proc() -> bool {
+	for player in session.players do if player.online do return true
+	return false
 }
 
 @(private="file")
