@@ -55,7 +55,53 @@ Order :: struct {
 	targetUnitType: GameUnitType
 }
 
-OrderSet :: map[int]Order
+// MCVs may queue two builds or two digs per turn, every other unit one order
+MAX_UNIT_ORDERS :: 2
+
+OrderList :: struct {
+	items: [MAX_UNIT_ORDERS]Order,
+	count: int
+}
+
+// orders of every unit by unit id
+OrderSet :: map[int]OrderList
+
+oneOrder :: proc(order: Order) -> OrderList {
+	return { items = { 0 = order }, count = 1 }
+}
+
+// the orders of a list, safe with counts that came over the network
+listedOrders :: proc(list: ^OrderList) -> []Order {
+	return list.items[:clamp(list.count, 0, MAX_UNIT_ORDERS)]
+}
+
+// whether a list may hold more than one order: an MCV with only builds or only digs
+multipleOrdersAllowed :: proc(unitType: GameUnitType, orders: []Order) -> bool {
+	if unitType != .MCV || len(orders) == 0 do return false
+	kind := orders[0].type
+	if kind != .BUILD && kind != .DIG do return false
+	for order in orders do if order.type != kind do return false
+	return true
+}
+
+// whether `order` can join the unit's queued orders instead of replacing them
+canQueueOrder :: proc(unitType: GameUnitType, list: OrderList, order: Order) -> bool {
+	list := list
+	if list.count == 0 || list.count >= MAX_UNIT_ORDERS do return false
+	queued := listedOrders(&list)
+	extended := make([dynamic]Order, 0, len(queued) + 1, context.temp_allocator)
+	append(&extended, ..queued)
+	append(&extended, order)
+	return multipleOrdersAllowed(unitType, extended[:])
+}
+
+// how many queued orders of a kind a unit has
+countOrders :: proc(list: OrderList, kind: OrderType) -> int {
+	list := list
+	count := 0
+	for order in listedOrders(&list) do if order.type == kind do count += 1
+	return count
+}
 
 Explosion :: struct {
 	at: hex.Axial,
@@ -80,7 +126,8 @@ ClientState :: struct {
 	status: ClientStatus,
 	uiState: UIState,
 	orders: OrderSet,
-	storedGunOrders: OrderSet,
+	// guns keep firing at their last target until told otherwise
+	storedGunOrders: map[int]Order,
 	myPix: int,
 	name: string,
 	explosions: [dynamic]Explosion,
@@ -557,13 +604,13 @@ clientSayOrders :: proc() {
 
 	networking.say(clientState.serverSocket, &header, encode(clientState.orders))
 	clear(&clientSentOrders)
-	for unitId, order in clientState.orders do clientSentOrders[unitId] = order
+	for unitId, list in clientState.orders do clientSentOrders[unitId] = list
 	clear(&clientState.storedGunOrders)
 
-	for unitId in clientState.orders {
+	for unitId, &list in clientState.orders {
 		unit, found := findUnitById(clientState.game.players[clientState.myPix].units[:], unitId)
-		if found && unit.type == .GUN {
-			clientState.storedGunOrders[unitId] = clientState.orders[unitId]
+		if found && unit.type == .GUN && list.count > 0 {
+			clientState.storedGunOrders[unitId] = list.items[0]
 		}
 	}
 }
@@ -574,7 +621,7 @@ applyStoredGunOrders :: proc () {
 	for unitId in clientState.storedGunOrders {
 		_, found := findUnitById(clientState.game.players[clientState.myPix].units[:], unitId)
 		if found {
-			clientState.orders[unitId] = clientState.storedGunOrders[unitId]
+			clientState.orders[unitId] = oneOrder(clientState.storedGunOrders[unitId])
 		}
 	}
 }
@@ -584,12 +631,14 @@ applyStoredGunOrders :: proc () {
 @(private)
 findShooter :: proc(bonk: Explosion) -> (unitId: int, aim: hex.Axial, found: bool) {
 	if !bonk.highlight do return 0, {}, false
-	for id, order in clientSentOrders {
-		#partial switch order.type {
-			case .DIREKT:
-				if order.target == bonk.at do return id, order.target, true
-			case .INDIREKT:
-				if hex.distance(order.target, bonk.at) <= 1 do return id, order.target, true
+	for id, &list in clientSentOrders {
+		for order in listedOrders(&list) {
+			#partial switch order.type {
+				case .DIREKT:
+					if order.target == bonk.at do return id, order.target, true
+				case .INDIREKT:
+					if hex.distance(order.target, bonk.at) <= 1 do return id, order.target, true
+			}
 		}
 	}
 	return 0, {}, false

@@ -66,6 +66,7 @@ BUTTON_BLD := ui.Button {
 BUTTON_CLR := ui.Button {
 	action = proc() {
 		postponeGenericAction(proc() {
+			// all of the unit's orders
 			delete_key(&clientState.orders, selectedUnitId)
 			clientState.uiState = .FREE
 		})
@@ -88,6 +89,10 @@ BUTTON_ROWS := [GameUnitType][]ui.Button {
 		BUTTON_DIG,
 		BUTTON_MOV,
 		BUTTON_BLD
+	},
+	.REC = {
+		BUTTON_CLR,
+		BUTTON_MOV
 	}
 }
 
@@ -115,6 +120,14 @@ BUTTON_ROW_BLD := [?]ui.Button {
 			})
 		},
 		caption = &ui.UI_TEXT_MCV
+	},
+	{
+		action = proc() {
+			postponeGenericAction(proc() {
+				selectedBuildingUnit = .REC
+			})
+		},
+		caption = &ui.UI_TEXT_REC
 	}
 }
 
@@ -156,6 +169,8 @@ OverlayCommand :: union {
 
 @(private)
 overlays: [dynamic]OverlayCommand
+@(private="file")
+rightPressPosition: rl.Vector2
 // cell under the cursor, if orders can be placed
 @(private)
 hoverCell: Maybe(hex.Axial)
@@ -190,6 +205,12 @@ clientPlanFrame :: proc(inputBlocked: bool) {
 
 	planOrders(clientState.orders)
 	if getSelectedUnit() != nil do planOrderPreview(inputBlocked)
+
+	// a right click aborts like the ABORT button, a right drag is left to the camera
+	if rl.IsMouseButtonPressed(.RIGHT) do rightPressPosition = rl.GetMousePosition()
+	if rl.IsMouseButtonReleased(.RIGHT) && getSelectedUnit() != nil {
+		if rl.Vector2Distance(rl.GetMousePosition(), rightPressPosition) < 6 do postponeGenericAction(abortOrderPlacement)
+	}
 }
 
 @(private="file")
@@ -402,21 +423,51 @@ clientDrawHUD :: proc() {
 	drawTurnControl()
 }
 
+// a second build or dig of an MCV joins the first one, anything else replaces the unit's orders
 createOrder :: proc(unitId: int, order: Order) {
 	rl.PlaySound(placeSound)
-	clientState.orders[unitId] = order
 	clientState.uiState = .FREE
+
+	unit, found := findUnitById(clientState.game.players[clientState.myPix].units[:], unitId)
+	list := clientState.orders[unitId]
+	if found && canQueueOrder(unit.type, list, order) {
+		list.items[list.count] = order
+		list.count += 1
+	} else {
+		list = oneOrder(order)
+	}
+	clientState.orders[unitId] = list
+
+	// stay selected while another order of the kind can still be added and paid for
+	if !found || !canQueueOrder(unit.type, list, order) || !affordsAnother(unit, list, order.type) {
+		selectedUnitId = NO_SELECTION
+	}
+}
+
+// gold left for one more queued build, or room for one more dig
+@(private="file")
+affordsAnother :: proc(unit: ^GameUnit, list: OrderList, kind: OrderType) -> bool {
+	queued := countOrders(list, kind)
+	#partial switch kind {
+		case .BUILD: return unit.gold - queued > 0
+		case .DIG:   return unit.gold + queued < 3
+	}
+	return false
+}
+
+// the ABORT button and right clicks: stop placing and drop the selection
+abortOrderPlacement :: proc() {
 	selectedUnitId = NO_SELECTION
+	clientState.uiState = .FREE
 }
 
 @(private="file")
 planOrders :: proc(orders: OrderSet) {
-	for unitId, order in orders {
-		if selectedUnitId == unitId && clientState.uiState != .FREE do continue
+	for unitId, &list in orders {
 		unit, ok := findUnitById(clientState.game.players[clientState.myPix].units[:], unitId)
 		if !ok do continue
 
-		switch order.type {
+		for order in listedOrders(&list) do switch order.type {
 			case .BUILD:
 				overlay(OverlayCell { order.target, .2, rl.DARKGRAY })
 				overlay(OverlayGhost { order.target, order.targetUnitType, myColor() })
@@ -446,13 +497,18 @@ drawOrdersControl :: proc() {
 		windowSize.y - buttonSize * 1.5
 	}
 
-	orderExists := selectedUnit.id in clientState.orders
+	orders := clientState.orders[selectedUnit.id]
 	row := BUTTON_ROWS[selectedUnit.type]
-	row[0].disabled = !orderExists
+	row[0].disabled = orders.count == 0
 
 	if selectedUnit.type == .MCV {
-		row[1].disabled = selectedUnit.gold >= 3 // DIG
-		row[3].disabled = selectedUnit.gold <= 0 // BUILD
+		// another dig or build joins the queued ones, gold has to cover all of them;
+		// a different kind of order replaces the queue, so only the current gold counts
+		digs := countOrders(orders, .DIG)
+		builds := countOrders(orders, .BUILD)
+		gold := selectedUnit.gold
+		row[1].disabled = digs > 0 ? (digs >= MAX_UNIT_ORDERS || gold + digs >= 3) : gold >= 3 // DIG
+		row[3].disabled = builds > 0 ? (builds >= MAX_UNIT_ORDERS || gold - builds <= 0) : gold <= 0 // BUILD
 	}
 	
 
@@ -562,10 +618,7 @@ drawTurnControl :: proc() {
 				rl.WHITE
 			},
 			proc() {
-				postponeGenericAction(proc() {
-					selectedUnitId = NO_SELECTION
-					clientState.uiState = .FREE
-				})
+				postponeGenericAction(abortOrderPlacement)
 			},
 			.ESCAPE
 		)
@@ -573,10 +626,11 @@ drawTurnControl :: proc() {
 }
 
 noOrdersAt :: proc(at: hex.Axial, orders: OrderSet) -> bool {
-	for _, order in orders {
-		if order.type == .DIREKT || order.type == .INDIREKT do continue
-
-		if order.target == at do return false
+	for _, &list in orders {
+		for order in listedOrders(&list) {
+			if order.type == .DIREKT || order.type == .INDIREKT do continue
+			if order.target == at do return false
+		}
 	}
 
 	return true

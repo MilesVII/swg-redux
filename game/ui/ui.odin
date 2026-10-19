@@ -29,6 +29,7 @@ UI_TEXT_CLR: rl.Texture2D
 UI_TEXT_TNK: rl.Texture2D
 UI_TEXT_GUN: rl.Texture2D
 UI_TEXT_MCV: rl.Texture2D
+UI_TEXT_REC: rl.Texture2D
 
 UI_TEXT_SUB: rl.Texture2D
 UI_TEXT_ABT: rl.Texture2D
@@ -55,6 +56,7 @@ initTextTextures :: proc() {
 	imageTnk := rl.ImageTextEx(font, "TONK", fontSize, spacing, rl.WHITE)
 	imageGun := rl.ImageTextEx(font, "GUN", fontSize, spacing, rl.WHITE)
 	imageMcv := rl.ImageTextEx(font, "MCV", fontSize, spacing, rl.WHITE)
+	imageRec := rl.ImageTextEx(font, "REC", fontSize, spacing, rl.WHITE)
 
 	imageSub := rl.ImageTextEx(font, "SUBMIT", fontSize, spacing, rl.WHITE)
 	imageAbt := rl.ImageTextEx(font, "ABORT", fontSize, spacing, rl.WHITE)
@@ -68,6 +70,7 @@ initTextTextures :: proc() {
 	UI_TEXT_TNK = rl.LoadTextureFromImage(imageTnk)
 	UI_TEXT_GUN = rl.LoadTextureFromImage(imageGun)
 	UI_TEXT_MCV = rl.LoadTextureFromImage(imageMcv)
+	UI_TEXT_REC = rl.LoadTextureFromImage(imageRec)
 
 	UI_TEXT_SUB = rl.LoadTextureFromImage(imageSub)
 	UI_TEXT_ABT = rl.LoadTextureFromImage(imageAbt)

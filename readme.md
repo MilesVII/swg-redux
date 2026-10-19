@@ -28,10 +28,13 @@ All parameters are optional
 ### Lobby mode
 Clients can connect to lobbies instead of connecting to a server directly right from the start. Lobbies offer an option to connect to started games and can accept new game requests from clients with matching auth token
 
+Game servers shut down once a finished game has no players left, or after an hour without any player connected
+
 Refer to `config.toml.example` for config details
 
 ## Rules and Controls
-`MCV` can `dig` gold from adjacent tiles, `move`, and `build` new units, each costing 1 gold. sees far, no shoot.
+`MCV` can `dig` gold from adjacent tiles, `move`, and `build` new units, each costing 1 gold. can dig two tiles or build two units per turn, orders are added one after another. sees near, slow move, no shoot.
+`REC` can `move` fast and sees very far. no shoot.
 `GUN` is a static emplacement. can `indirekt fire` far, attacking three random tiles within radius. no move, can't see.
 `TONK` can `move`, and can `direkt fire`, attacking selected tile within range. can withstand an extra hit, medium move, medium see.
 
@@ -53,7 +56,7 @@ Refer to `config.toml.example` for config details
 ### In game
 - `Z/X/C/V` to pick order types
 - `Enter` to submit orders
-- `Esc` to abort current order placement
+- `Esc` or right click to abort current order placement
 - `F1` to open settings menu
 
 #### 2D camera

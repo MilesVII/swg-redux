@@ -33,8 +33,10 @@ Session :: struct {
 	game: GameState,
 	over: bool,
 	managed: bool,
-	// set once the game is over and everyone left, ends the main loop
-	closing: bool
+	// set once the game is over and everyone left, or nobody showed up for a while; ends the main loop
+	closing: bool,
+	// when the last player left, or the server started
+	emptySince: time.Time
 }
 
 @(private="file")
@@ -45,6 +47,8 @@ explosionsBuffer: [dynamic]ExplosionBufferEntry
 
 @(private="file")
 SERVER_IDLE_SKIP := time.Millisecond * 100
+// how long a game may sit without any player connected
+ABANDONED_TIMEOUT :: time.Hour
 
 server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, local: bool, port: int, lobbyPort: int) {
 	session = Session {
@@ -84,16 +88,28 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, lo
 	if session.managed do signalLobby(LOBBY_SIGNAL_READY)
 
 	networking.startAccepting(receptionSocket)
+	session.emptySince = time.now()
 
 	for !session.closing {
 		for synchan.can_recv(networking.rx) {
 			data, ok := synchan.recv(networking.rx)
 			if ok do processPackage(data)
 		}
+
+		// abandoned games go down after a while, finished ones as soon as they're empty
+		if anyPlayerOnline() do session.emptySince = time.now()
+		else if time.since(session.emptySince) > ABANDONED_TIMEOUT do shutDown("nobody connected for a while")
+
 		free_all(context.temp_allocator)
 		time.sleep(SERVER_IDLE_SKIP)
 	}
-	utils.log("game over and everyone left, shutting down")
+}
+
+@(private="file")
+shutDown :: proc(reason: string) {
+	utils.log(reason, ", shutting down")
+	if session.managed do signalLobby(LOBBY_SIGNAL_TERMINATE)
+	session.closing = true
 }
 
 @(private="file")
@@ -118,10 +134,7 @@ processPackage :: proc(p: networking.Package) {
 			}
 			networking.hang(p.socket)
 			// a finished game has nothing left to serve once its last player is gone
-			if session.over && !anyPlayerOnline() {
-				if session.managed do signalLobby(LOBBY_SIGNAL_TERMINATE)
-				session.closing = true
-			}
+			if session.over && !anyPlayerOnline() do shutDown("game over and everyone left")
 		case .JOIN:
 			if onJoin(playerName, p.socket) do startGameIfFull()
 		case .UPDATE:
@@ -321,7 +334,15 @@ executeOrders :: proc(playerIx: int, orders: OrderSet) {
 	for unitId in orders do if unitId < idLimit do append(&unitIds, unitId)
 	slice.sort(unitIds[:])
 
-	for unitId in unitIds do executeOrder(playerIx, unitId, orders[unitId])
+	for unitId in unitIds {
+		list := orders[unitId]
+		queued := listedOrders(&list)
+		unit, found := findUnitById(session.game.players[playerIx].units[:], unitId)
+		if !found do continue
+		// only MCVs may queue, and only builds or only digs; anything else runs its first order
+		if len(queued) > 1 && !multipleOrdersAllowed(unit.type, queued) do queued = queued[:1]
+		for order in queued do executeOrder(playerIx, unitId, order)
+	}
 }
 
 executeOrder :: proc(playerIx: int, unitId: int, order: Order) {

@@ -30,10 +30,10 @@ colors : [HEIGHTS]rl.Color = {
 
 GameGrid :: hex.Grid(hex.GridCell)
 
-GameUnitType :: enum { TONK, GUN, MCV }
-VISION := [GameUnitType] int { .TONK = 4, .GUN = 2, .MCV = 7 }
-MOVING := [GameUnitType] int { .TONK = 4, .GUN = 0, .MCV = 5 }
-ARANGE := [GameUnitType] int { .TONK = 5, .GUN = 8, .MCV = 0 }
+GameUnitType :: enum { TONK, GUN, MCV, REC }
+VISION := [GameUnitType] int { .TONK = 5, .GUN = 2, .MCV = 3, .REC = 8 }
+MOVING := [GameUnitType] int { .TONK = 4, .GUN = 0, .MCV = 3, .REC = 5 }
+ARANGE := [GameUnitType] int { .TONK = 5, .GUN = 8, .MCV = 0, .REC = 0 }
 INDIREKT_BARRAGE_SIZE := 3
 
 GameUnit :: struct {
@@ -289,6 +289,9 @@ drawUnit :: proc(position: hex.Axial, unit: GameUnitType, gold: int, color: rl.C
 			ui.drawTriangle(position, true, color, .7)
 			ui.drawTriangle(position, false, color, .7)
 			ui.drawGoldMarks(position, gold)
+		case .REC:
+			ui.drawTriangle(position, true, color, .3)
+			ui.drawTriangle(position, false, color, .3)
 	}
 
 	if (highlight) {

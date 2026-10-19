@@ -18,7 +18,7 @@ UNIT_MIN_MOVE_S :: f32(.35)
 // models from assets/3d: <name>.obj for a solid unit, or <name>-hull.obj with an optional <name>-turret.obj
 // Z-up and X-forward, base on the origin, turrets turn around the vertical axis through the origin
 @(private="file")
-MODEL_NAMES := [GameUnitType]string { .TONK = "tonk", .GUN = "gun", .MCV = "mcv" }
+MODEL_NAMES := [GameUnitType]string { .TONK = "tonk", .GUN = "gun", .MCV = "mcv", .REC = "rec" }
 // world units per model unit, hex centers are 1 apart
 MODEL_SCALE :: f32(.4)
 // hulls reaching further from their center than this are shrunk to stay within their hex
@@ -59,10 +59,17 @@ UNIT_BOXES := [GameUnitType][]Box {
 		{ { 0, .32, .16 }, { .36, .18, .24 }, 0 },
 		{ { .12, .40, -.18 }, { .05, .30, .05 }, 0 },
 	},
+	.REC = {
+		{ { 0, .08, 0 }, { .38, .14, .50 }, 0 },
+		{ { 0, .24, -.04 }, { .06, .20, .06 }, 0 },
+		{ { 0, .36, -.04 }, { .30, .05, .10 }, 0 },
+	},
 }
 // tops of the placeholder shapes
 @(private="file")
-UNIT_HEIGHT := [GameUnitType]f32 { .TONK = .39, .GUN = .58, .MCV = .67 }
+UNIT_HEIGHT := [GameUnitType]f32 { .TONK = .39, .GUN = .58, .MCV = .67, .REC = .4 }
+// recon turrets keep turning, radians per second
+RECON_SPIN :: f32(1.6)
 // placeholder boxes are authored a bit small
 @(private="file")
 BOX_SCALE :: f32(1.15)
@@ -315,8 +322,10 @@ syncUnits3D :: proc(dt: f32) {
 			}
 			// turrets of your units follow the attack orders you give
 			if pix == clientState.myPix {
-				order, ordered := clientState.orders[unit.id]
-				if ordered && (order.type == .DIREKT || order.type == .INDIREKT) do aimTurret(v, order.target)
+				list, ordered := clientState.orders[unit.id]
+				if ordered do for order in listedOrders(&list) {
+					if order.type == .DIREKT || order.type == .INDIREKT do aimTurret(v, order.target)
+				}
 			} else if !moving(v^) && abs(v.path[len(v.path) - 1].y - target.y) > 1e-4 {
 				// the tile under it changed height
 				clear(&v.path)
@@ -382,9 +391,9 @@ drawShape :: proc(type: GameUnitType, pose: Pose, scale: f32, color: rl.Color, c
 
 // slots of the bars above units: gold for MCVs, hit points for TONKs
 @(private="file")
-BAR_CAPACITY := [GameUnitType]int { .TONK = 2, .GUN = 0, .MCV = 3 }
+BAR_CAPACITY := [GameUnitType]int { .TONK = 2, .GUN = 0, .MCV = 3, .REC = 0 }
 @(private="file")
-BAR_COLOR := [GameUnitType]rl.Color { .TONK = rl.RED, .GUN = rl.BLANK, .MCV = rl.GOLD }
+BAR_COLOR := [GameUnitType]rl.Color { .TONK = rl.RED, .GUN = rl.BLANK, .MCV = rl.GOLD, .REC = rl.BLANK }
 
 // screen space bars above units, drawn with the HUD
 drawUnitBars3D :: proc() {
@@ -427,12 +436,15 @@ drawUnitBars3D :: proc() {
 drawUnits3D :: proc() {
 	setLightUniforms3D(units.shader)
 
-	for _, v in units.visuals {
+	for key, v in units.visuals {
 		coverage := coverageOf(v)
 		if coverage <= 0 do continue
 		pose := poseOf(v)
 		hovered := v.cell == ui.pointedCell && !v.fadingOut
-		drawShape(v.type, pose, hovered ? 1.12 : 1, v.color, coverage, 0, v.turret)
+		turret := v.turret
+		// recon turrets spin on their own, offset per unit so they don't turn in sync
+		if v.type == .REC do turret = time3D * RECON_SPIN + f32(key[1]) * 1.7
+		drawShape(v.type, pose, hovered ? 1.12 : 1, v.color, coverage, 0, turret)
 	}
 
 	// units that orders will build
@@ -440,7 +452,8 @@ drawUnits3D :: proc() {
 	for command in overlays {
 		ghost, isGhost := command.(OverlayGhost)
 		if !isGhost do continue
-		drawShape(ghost.type, { cellTop3D(ghost.at), 0, 0 }, 1, ghost.color, .25 + pulse * .2, .3)
+		turret := ghost.type == .REC ? time3D * RECON_SPIN : 0
+		drawShape(ghost.type, { cellTop3D(ghost.at), 0, 0 }, 1, ghost.color, .25 + pulse * .2, .3, turret)
 	}
 }
 
