@@ -9,16 +9,25 @@ import "shaded"
 // the original top-down renderer
 VIEW_2D := ClientView {
 	name = "2D",
-	update = proc(cameraLocked: bool, inputBlocked: bool) {
-		ui.update2DCamera(cameraLocked || inputBlocked)
-	},
+	update = update2D,
 	scene = scene2D,
-	focus = proc(at: hex.Axial) {
-		ui.camera.target = hex.axialToWorld(at)
-	},
-	toScreen = proc(at: hex.Axial) -> rl.Vector2 {
-		return rl.GetWorldToScreen2D(hex.axialToWorld(at), ui.camera)
-	},
+	focus = focus2D,
+	toScreen = toScreen2D,
+}
+
+@(private="file")
+update2D :: proc(cameraLocked: bool, inputBlocked: bool) {
+	ui.update2DCamera(cameraLocked || inputBlocked)
+}
+
+@(private="file")
+focus2D :: proc(at: hex.Axial) {
+	ui.camera.target = hex.axialToWorld(at)
+}
+
+@(private="file")
+toScreen2D :: proc(at: hex.Axial) -> rl.Vector2 {
+	return rl.GetWorldToScreen2D(hex.axialToWorld(at), ui.camera)
 }
 
 @(private="file")

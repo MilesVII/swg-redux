@@ -15,19 +15,31 @@ VIEW_3D := ClientView {
 	deinit = deinit3D,
 	update = update3D,
 	scene = scene3D,
-	focus = proc(at: hex.Axial) {
-		world := hex.axialToWorld(at)
-		orbit.focus = { world.x, FOCUS_HEIGHT, world.y }
-	},
-	toScreen = proc(at: hex.Axial) -> rl.Vector2 {
-		return rl.GetWorldToScreen(cellTop3D(at), camera3D)
-	},
+	focus = focus3D,
+	toScreen = toScreen3D,
 	onExplosionStart = explosionStart3D,
 	onExplosionImpact = explosionImpact3D,
 	settings = settings3D,
-	hud = proc() {
-		if clientState.status != .CONNECTING do drawUnitBars3D()
-	},
+	shocks = muzzleShocks3D,
+	hud = hud3D,
+}
+// hooks are named procedures: proc literals inside this global initializer
+// crashed the compiler (dev-2025-03) depending on where they sat in the file
+
+@(private="file")
+focus3D :: proc(at: hex.Axial) {
+	world := hex.axialToWorld(at)
+	orbit.focus = { world.x, FOCUS_HEIGHT, world.y }
+}
+
+@(private="file")
+toScreen3D :: proc(at: hex.Axial) -> rl.Vector2 {
+	return rl.GetWorldToScreen(cellTop3D(at), camera3D)
+}
+
+@(private="file")
+hud3D :: proc() {
+	if clientState.status != .CONNECTING do drawUnitBars3D()
 }
 
 // "true isometric" elevation: atan(1 / sqrt(2))
@@ -259,7 +271,7 @@ scene3D :: proc() {
 	rl.ClearBackground({ 10, 10, 12, 255 })
 
 	syncTerrain3D()
-	syncUnits3D()
+	syncUnits3D(dt)
 	updateFX3D(dt)
 
 	rl.BeginMode3D(camera3D)

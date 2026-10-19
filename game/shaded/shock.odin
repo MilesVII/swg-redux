@@ -6,6 +6,8 @@ ShockState :: struct {
 	progress: f32,
 	resolution: rl.Vector2,
 	origin: rl.Vector2,
+	scale: f32,
+	strength: f32,
 }
 
 ShockShader :: Shader(ShockState)
@@ -36,6 +38,18 @@ updateShockShader :: proc(shader: ShockShader, tex: rl.RenderTexture2D) {
 		rl.GetShaderLocation(shader.shader, "origin"),
 		&shader.state.origin,
 		.VEC2
+	)
+	rl.SetShaderValue(
+		shader.shader,
+		rl.GetShaderLocation(shader.shader, "scale"),
+		&shader.state.scale,
+		.FLOAT
+	)
+	rl.SetShaderValue(
+		shader.shader,
+		rl.GetShaderLocation(shader.shader, "strength"),
+		&shader.state.strength,
+		.FLOAT
 	)
 }
 

@@ -416,11 +416,3 @@ buttonRow :: proc(
 		utils.setCursorHover(hovered)
 	}
 }
-
-// writes the last presented frame to an image file
-saveFrame :: proc(path: cstring) {
-	image := rl.LoadImageFromTexture(rt.texture)
-	rl.ImageFlipVertical(&image)
-	rl.ExportImage(image, path)
-	rl.UnloadImage(image)
-}

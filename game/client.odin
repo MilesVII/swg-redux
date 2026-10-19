@@ -4,8 +4,6 @@ import rl "vendor:raylib"
 
 import "core:net"
 import "core:strings"
-import "core:fmt"
-import "core:time"
 import synchan "core:sync/chan"
 
 import "hex"
@@ -108,6 +106,10 @@ clientPendingState: GameState
 clientUpdateAnimationsPending: bool = false
 @(private)
 clientFirstUpdate: bool = true
+// orders of the last turn this client submitted, to tell which of your units fired a shot
+@(private)
+clientSentOrders: OrderSet
+
 // bumped whenever a new server state replaces the shown one
 @(private)
 clientStateVersion: int
@@ -205,7 +207,6 @@ client :: proc(
 		clientPlanFrame(inputBlocked)
 		ui.drawFrame(activeView.scene, clientDrawHUD, clientPostFX)
 		utils.cursorHoverEnd()
-		if rl.IsKeyPressed(.F12) do saveScreenshot()
 		flushClickQueue()
 		saveClientSettingsIfChanged()
 
@@ -239,16 +240,6 @@ handleClientHotkeys :: proc() {
 	if rl.IsKeyPressed(.F2) do switchView()
 }
 
-@(private="file")
-saveScreenshot :: proc() {
-	now := time.now()
-	y, mon, d := time.date(now)
-	h, m, s := time.clock(now)
-	path := fmt.ctprintf("screenshot-%04d%02d%02d-%02d%02d%02d.png", y, int(mon), d, h, m, s)
-	ui.saveFrame(path)
-	setNotice(fmt.tprintf("SAVED %s", path))
-}
-
 @(private)
 switchView :: proc() {
 	activeView = activeView == &VIEW_3D ? &VIEW_2D : &VIEW_3D
@@ -270,13 +261,20 @@ clientPostFX :: proc(tex: rl.RenderTexture2D) {
 		rl.EndTextureMode()
 	}
 
+	shocks := make([dynamic]ScreenShock, context.temp_allocator)
 	for bonk in clientState.explosions {
 		if !bonk.lethal do continue
+		append(&shocks, ScreenShock { activeView.toScreen(bonk.at), bonk.elapsedTime / EXPLOSION_DURATION_S, 1, 1 })
+	}
+	if activeView.shocks != nil do append(&shocks, ..activeView.shocks())
+
+	for shock in shocks {
 		rl.BeginTextureMode(tex)
 
-		screenOrigin := activeView.toScreen(bonk.at)
-		shockShader.state.origin = { screenOrigin.x, f32(ui.windowSize.y) - screenOrigin.y }
-		shockShader.state.progress = bonk.elapsedTime / EXPLOSION_DURATION_S
+		shockShader.state.origin = { shock.origin.x, f32(ui.windowSize.y) - shock.origin.y }
+		shockShader.state.progress = shock.progress
+		shockShader.state.scale = shock.scale
+		shockShader.state.strength = shock.strength
 		shockShader.state.resolution = { f32(ui.windowSize.x), f32(ui.windowSize.y) }
 		shaded.updateShockShader(shockShader, tex)
 
@@ -527,6 +525,8 @@ clientSayOrders :: proc() {
 	}
 
 	networking.say(clientState.serverSocket, &header, encode(clientState.orders))
+	clear(&clientSentOrders)
+	for unitId, order in clientState.orders do clientSentOrders[unitId] = order
 	clear(&clientState.storedGunOrders)
 
 	for unitId in clientState.orders {
@@ -546,6 +546,22 @@ applyStoredGunOrders :: proc () {
 			clientState.orders[unitId] = clientState.storedGunOrders[unitId]
 		}
 	}
+}
+
+// your unit whose submitted order produced this explosion, and the cell it aimed at;
+// barrage shells scatter around that cell, the aim stays the same
+@(private)
+findShooter :: proc(bonk: Explosion) -> (unitId: int, aim: hex.Axial, found: bool) {
+	if !bonk.highlight do return 0, {}, false
+	for id, order in clientSentOrders {
+		#partial switch order.type {
+			case .DIREKT:
+				if order.target == bonk.at do return id, order.target, true
+			case .INDIREKT:
+				if hex.distance(order.target, bonk.at) <= 1 do return id, order.target, true
+		}
+	}
+	return 0, {}, false
 }
 
 @(private)

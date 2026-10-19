@@ -117,14 +117,22 @@ overlayPath3D :: proc(path: hex.Path, color: rl.Color) {
 	rlgl.End()
 }
 
-// straight line for direct fire, a dashed ballistic arc for indirect
+// straight line for direct fire, a dashed ballistic arc for indirect,
+// both starting about a tile away so they don't cut through the shooter
 @(private="file")
 overlayShot3D :: proc(from: hex.Axial, to: hex.Axial, color: rl.Color, indirekt: bool) {
+	START_OFFSET :: f32(.9)
+
 	a := cellTop3D(from) + { 0, .3, 0 }
 	b := cellTop3D(to) + { 0, .06, 0 }
 	distance := rl.Vector3Length(b - a)
 	segments := indirekt ? 48 : 1
 	apex := .8 + distance * .3
+
+	// the arc is linear on the ground, so a share of the ground distance is a share of the curve;
+	// adjacent targets keep at least half of their line
+	flat := rl.Vector2Length({ b.x - a.x, b.z - a.z })
+	start := flat > 1e-4 ? min(START_OFFSET / flat, .5) : 0
 
 	point :: proc(a, b: rl.Vector3, t: f32, apex: f32, indirekt: bool) -> rl.Vector3 {
 		p := a + (b - a) * t
@@ -135,8 +143,8 @@ overlayShot3D :: proc(from: hex.Axial, to: hex.Axial, color: rl.Color, indirekt:
 	rlgl.Begin(rlgl.TRIANGLES)
 	rlgl.Color4ub(color.r, color.g, color.b, color.a)
 	for i in 0..<segments {
-		t0 := f32(i) / f32(segments)
-		t1 := f32(i + 1) / f32(segments)
+		t0 := start + (1 - start) * f32(i) / f32(segments)
+		t1 := start + (1 - start) * f32(i + 1) / f32(segments)
 		if indirekt {
 			phase := math.mod(t0 * 10 - utils.flicker, 1)
 			if phase < 0 do phase += 1

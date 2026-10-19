@@ -3,6 +3,9 @@
 const float MAG = 4.0;
 
 uniform float progress;
+// 1 sweeps the whole screen, smaller rings stay around the origin
+uniform float scale;
+uniform float strength;
 uniform vec2 resolution;
 uniform vec2 origin;
 uniform sampler2D texture0;
@@ -15,11 +18,11 @@ void main() {
 	vec2 fragCoord = gl_FragCoord.xy;
 	vec2 originalPick = fragCoord;
 
-	float dst = distance(origin, fragCoord) / length(resolution);
+	float dst = distance(origin, fragCoord) / length(resolution) / max(scale, 0.001);
 	float prg = progress;
 	float xpl = remap(prg, 0.0, 1.0, -1.0, 2.0);
 	float mag = clamp(1.0 - abs(dst - xpl), 0.0, 2.0);
-	mag = pow(mag, 7.2);
+	mag = pow(mag, 7.2) * strength;
 
 	vec2 offset = normalize(originalPick - origin);
 	vec2 sideOffset = vec2(-offset.y, offset.x);

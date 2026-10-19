@@ -4,7 +4,7 @@ import rl "vendor:raylib"
 
 import "core:math"
 import "core:fmt"
-import "core:strings"
+import "core:os"
 
 import "hex"
 import "ui"
@@ -15,12 +15,25 @@ UNIT_FADE_S :: f32(.5)
 UNIT_SPEED :: f32(3)
 UNIT_MIN_MOVE_S :: f32(.35)
 
-// drop-in models, looked up as assets/models/<type>.<extension>
-// authored in hex units (neighbor centers are 1 apart), base at the origin, facing +Z
+// models from assets/3d: <name>.obj for a solid unit, or <name>-hull.obj with an optional <name>-turret.obj
+// Z-up and X-forward, base on the origin, turrets turn around the vertical axis through the origin
 @(private="file")
 MODEL_NAMES := [GameUnitType]string { .TONK = "tonk", .GUN = "gun", .MCV = "mcv" }
+// world units per model unit, hex centers are 1 apart
+MODEL_SCALE :: f32(.4)
+// hulls reaching further from their center than this are shrunk to stay within their hex
+MODEL_FIT_RADIUS :: f32(.5)
+// degrees per second
+TURRET_SPEED :: f32(220)
+
 @(private="file")
-MODEL_EXTENSIONS := [?]string { "glb", "gltf", "obj", "iqm", "m3d" }
+UnitModel :: struct {
+	hull: rl.Mesh,
+	turret: rl.Mesh,
+	hasTurret: bool,
+	// top of the model, for the bars above it
+	height: f32
+}
 
 // placeholder shapes made of boxes: offset, size, tilt around X in degrees
 @(private="file")
@@ -47,7 +60,7 @@ UNIT_BOXES := [GameUnitType][]Box {
 		{ { .12, .40, -.18 }, { .05, .30, .05 }, 0 },
 	},
 }
-// how far gold marks float above the unit's base
+// tops of the placeholder shapes
 @(private="file")
 UNIT_HEIGHT := [GameUnitType]f32 { .TONK = .39, .GUN = .58, .MCV = .67 }
 // placeholder boxes are authored a bit small
@@ -67,6 +80,9 @@ UnitVisual :: struct {
 	moveDuration: f32,
 	// facing once the move is over
 	heading: f32,
+	// turret yaw relative to the hull, and where it is turning to
+	turret: f32,
+	turretTarget: f32,
 	fadeStart: f32,
 	fadingOut: bool,
 	seen: bool
@@ -77,7 +93,7 @@ units: struct {
 	shader: rl.Shader,
 	material: rl.Material,
 	cube: rl.Mesh,
-	models: [GameUnitType]Maybe(rl.Model),
+	models: [GameUnitType]Maybe(UnitModel),
 	// keyed by player index and unit id
 	visuals: map[[2]int]UnitVisual
 }
@@ -89,30 +105,76 @@ initUnits3D :: proc() {
 	units.cube = rl.GenMeshCube(1, 1, 1)
 
 	for name, type in MODEL_NAMES {
-		for extension in MODEL_EXTENSIONS {
-			path := strings.clone_to_cstring(fmt.tprintf("assets/models/%s.%s", name, extension), context.temp_allocator)
-			if !rl.FileExists(path) do continue
-			model := rl.LoadModel(path)
-			if !rl.IsModelValid(model) do continue
-			for i in 0..<model.materialCount do model.materials[i].shader = units.shader
-			units.models[type] = model
-			break
+		hullPath := fmt.tprintf("assets/3d/%s-hull.obj", name)
+		if !os.exists(hullPath) do hullPath = fmt.tprintf("assets/3d/%s.obj", name)
+		hull, hullOk := loadObjGeometry(hullPath)
+		if !hullOk do continue
+		defer deleteObjGeometry(&hull)
+		turret, hasTurret := loadObjGeometry(fmt.tprintf("assets/3d/%s-turret.obj", name))
+		defer deleteObjGeometry(&turret)
+
+		// hull and turret share a scale so they keep fitting together
+		scale := min(MODEL_SCALE, MODEL_FIT_RADIUS / max(horizontalExtent(hull), 1e-3))
+		scaleObjGeometry(&hull, scale)
+		model := UnitModel { hull = uploadObjGeometry(hull), height = hull.max.y }
+		if hasTurret {
+			scaleObjGeometry(&turret, scale)
+			model.turret = uploadObjGeometry(turret)
+			model.hasTurret = true
+			model.height = max(model.height, turret.max.y)
 		}
+		units.models[type] = model
 	}
 }
 
 deinitUnits3D :: proc() {
 	for model in units.models {
 		if m, ok := model.?; ok {
-			// the shader is ours, don't let UnloadModel take it
-			for i in 0..<m.materialCount do m.materials[i].shader = {}
-			rl.UnloadModel(m)
+			rl.UnloadMesh(m.hull)
+			if m.hasTurret do rl.UnloadMesh(m.turret)
 		}
 	}
 	rl.UnloadMesh(units.cube)
 	rl.UnloadShader(units.shader)
 	for _, v in units.visuals do delete(v.path)
 	delete(units.visuals)
+}
+
+@(private="file")
+unitHeight :: proc(type: GameUnitType) -> f32 {
+	if model, ok := units.models[type].?; ok do return model.height
+	return UNIT_HEIGHT[type]
+}
+
+// shortest signed difference between two angles in radians
+@(private="file")
+angleDelta :: proc(from, to: f32) -> f32 {
+	d := math.mod(to - from + math.PI, 2 * math.PI)
+	if d < 0 do d += 2 * math.PI
+	return d - math.PI
+}
+
+@(private="file")
+aimTurret :: proc(v: ^UnitVisual, at: hex.Axial) {
+	position := poseOf(v^).position
+	target := hex.axialToWorld(at)
+	direction := rl.Vector2 { target.x - position.x, target.y - position.z }
+	if rl.Vector2Length(direction) < 1e-3 do return
+	v.turretTarget = angleDelta(0, math.atan2(direction.x, direction.y) - v.heading)
+}
+
+// turns the shooter's turret to its target and tells where its shell leaves from
+aimMuzzle3D :: proc(unitId: int, at: hex.Axial) -> (muzzle: rl.Vector3, ok: bool) {
+	key := [2]int { clientState.myPix, unitId }
+	v, exists := &units.visuals[key]
+	if !exists do return {}, false
+	aimTurret(v, at)
+
+	pose := poseOf(v^)
+	target := hex.axialToWorld(at)
+	direction := rl.Vector2Normalize({ target.x - pose.position.x, target.y - pose.position.z })
+	height := unitHeight(v.type)
+	return pose.position + { direction.x * .3, height * .7, direction.y * .3 }, true
 }
 
 @(private="file")
@@ -209,7 +271,7 @@ coverageOf :: proc(v: UnitVisual) -> f32 {
 }
 
 // follows the shown state: new units fade in, gone ones fade out, moved ones slide
-syncUnits3D :: proc() {
+syncUnits3D :: proc(dt: f32) {
 	for _, &v in units.visuals do v.seen = false
 
 	for player, pix in clientState.game.players {
@@ -250,6 +312,11 @@ syncUnits3D :: proc() {
 			if v.cell != unit.position {
 				startMove(v, unit.position)
 				v.cell = unit.position
+			}
+			// turrets of your units follow the attack orders you give
+			if pix == clientState.myPix {
+				order, ordered := clientState.orders[unit.id]
+				if ordered && (order.type == .DIREKT || order.type == .INDIREKT) do aimTurret(v, order.target)
 			} else if !moving(v^) && abs(v.path[len(v.path) - 1].y - target.y) > 1e-4 {
 				// the tile under it changed height
 				clear(&v.path)
@@ -259,7 +326,11 @@ syncUnits3D :: proc() {
 	}
 
 	gone := make([dynamic][2]int, context.temp_allocator)
+	step := TURRET_SPEED * rl.DEG2RAD * dt
 	for key, &v in units.visuals {
+		delta := angleDelta(v.turret, v.turretTarget)
+		v.turret += clamp(delta, -step, step)
+
 		if !v.seen && !v.fadingOut {
 			v.fadingOut = true
 			v.fadeStart = time3D
@@ -281,7 +352,7 @@ setUnitUniforms :: proc(coverage: f32, glow: f32) {
 }
 
 @(private="file")
-drawShape :: proc(type: GameUnitType, pose: Pose, scale: f32, color: rl.Color, coverage: f32, glow: f32) {
+drawShape :: proc(type: GameUnitType, pose: Pose, scale: f32, color: rl.Color, coverage: f32, glow: f32, turret := f32(0)) {
 	setUnitUniforms(coverage, glow)
 	position := pose.position
 	// nose up when climbing: positive pitch tilts +Z towards +Y
@@ -290,17 +361,15 @@ drawShape :: proc(type: GameUnitType, pose: Pose, scale: f32, color: rl.Color, c
 		rl.MatrixRotateX(-pose.pitch) *
 		rl.MatrixScale(scale, scale, scale)
 
+	material := units.material
+	material.maps[rl.MaterialMapIndex.ALBEDO].color = color
+
 	if model, ok := units.models[type].?; ok {
-		for i in 0..<model.meshCount {
-			material := model.materials[model.meshMaterial[i]]
-			material.maps[rl.MaterialMapIndex.ALBEDO].color = color
-			rl.DrawMesh(model.meshes[i], material, placement * model.transform)
-		}
+		rl.DrawMesh(model.hull, material, placement)
+		if model.hasTurret do rl.DrawMesh(model.turret, material, placement * rl.MatrixRotateY(turret))
 		return
 	}
 
-	material := units.material
-	material.maps[rl.MaterialMapIndex.ALBEDO].color = color
 	placement = placement * rl.MatrixScale(BOX_SCALE, BOX_SCALE, BOX_SCALE)
 	for box in UNIT_BOXES[type] {
 		transform := placement *
@@ -332,7 +401,7 @@ drawUnitBars3D :: proc() {
 		if coverage <= 0 do continue
 
 		pose := poseOf(v)
-		anchor := pose.position + { 0, UNIT_HEIGHT[v.type] + .12, 0 }
+		anchor := pose.position + { 0, unitHeight(v.type) + .12, 0 }
 		if rl.Vector3DotProduct(anchor - camera3D.position, forward) <= 0 do continue
 		screen := rl.GetWorldToScreen(anchor, camera3D)
 
@@ -363,7 +432,7 @@ drawUnits3D :: proc() {
 		if coverage <= 0 do continue
 		pose := poseOf(v)
 		hovered := v.cell == ui.pointedCell && !v.fadingOut
-		drawShape(v.type, pose, hovered ? 1.12 : 1, v.color, coverage, 0)
+		drawShape(v.type, pose, hovered ? 1.12 : 1, v.color, coverage, 0, v.turret)
 	}
 
 	// units that orders will build

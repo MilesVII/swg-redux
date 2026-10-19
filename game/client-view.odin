@@ -28,9 +28,22 @@ ClientView :: struct {
 	settings: proc(layout: ^SettingsLayout),
 	// screen space parts of the world, drawn under the rest of the HUD
 	hud: proc(),
+	// shockwaves besides the ones of lethal explosions
+	shocks: proc() -> []ScreenShock,
 }
 
 CLIENT_VIEWS := [?]^ClientView { &VIEW_2D, &VIEW_3D }
+
+// a ring of distortion on the screen
+ScreenShock :: struct {
+	// pixels from the top left corner
+	origin: rl.Vector2,
+	// 0 to 1 over the life of the ring
+	progress: f32,
+	// 1 sweeps the whole screen
+	scale: f32,
+	strength: f32
+}
 
 @(private)
 activeView: ^ClientView = &VIEW_2D

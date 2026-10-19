@@ -73,9 +73,19 @@ Marker :: struct {
 	start: f32
 }
 
+// muzzle blasts of your units, a short small shockwave each
+@(private="file")
+MuzzleShock :: struct {
+	position: rl.Vector3,
+	start: f32
+}
+@(private="file")
+MUZZLE_SHOCK_S :: f32(.55)
+
 @(private="file")
 fx: struct {
 	shader: rl.Shader,
+	muzzleShocks: [dynamic]MuzzleShock,
 	particles: [dynamic]Particle,
 	emitters: [dynamic]Emitter,
 	lights: [dynamic]Light,
@@ -92,10 +102,64 @@ deinitFX3D :: proc() {
 	delete(fx.emitters)
 	delete(fx.lights)
 	delete(fx.markers)
+	delete(fx.muzzleShocks)
 }
 
 explosionStart3D :: proc(bonk: Explosion) {
 	append(&fx.markers, Marker { bonk.at, time3D })
+
+	unitId, aim, isYours := findShooter(bonk)
+	if !isYours do return
+	muzzle, found := aimMuzzle3D(unitId, aim)
+	if !found do return
+	spawnMuzzleBlast(muzzle)
+	append(&fx.muzzleShocks, MuzzleShock { muzzle, time3D })
+	append(&fx.lights, Light { position = muzzle, life = .25, power = 1.2 })
+}
+
+// screen positions of the muzzle shockwaves for the post effects
+muzzleShocks3D :: proc() -> []ScreenShock {
+	result := make([dynamic]ScreenShock, context.temp_allocator)
+	forward := rl.Vector3Normalize(camera3D.target - camera3D.position)
+	for shock in fx.muzzleShocks {
+		if rl.Vector3DotProduct(shock.position - camera3D.position, forward) <= 0 do continue
+		progress := clamp((time3D - shock.start) / MUZZLE_SHOCK_S, 0, 1)
+		append(&result, ScreenShock { rl.GetWorldToScreen(shock.position, camera3D), progress, .12, .6 })
+	}
+	return result[:]
+}
+
+// flash and a puff of smoke where a shell leaves the barrel
+@(private="file")
+spawnMuzzleBlast :: proc(at: rl.Vector3) {
+	for _ in 0..<2 {
+		emit({
+			kind = .FIRE, position = at,
+			life = randRange(.06, .1), size0 = .16, size1 = .3,
+			color0 = { 1, .95, .75 }, color1 = { 1, .6, .2 }, opacity = 1
+		})
+	}
+	for _ in 0..<12 {
+		direction := randomUp(.1, 1)
+		gray := randRange(.42, .58)
+		emit({
+			kind = .SMOKE, position = at + direction * .05,
+			velocity = direction * randRange(.4, 1.3),
+			delay = randRange(0, .08),
+			life = randRange(1, 1.8), size0 = randRange(.06, .1), size1 = randRange(.3, .45),
+			color0 = { gray, gray * .97, gray * .92 }, color1 = { .62, .61, .6 }, opacity = .75,
+			drag = 2.6, lift = .25
+		})
+	}
+	for _ in 0..<6 {
+		emit({
+			kind = .SPARK, position = at,
+			velocity = randomUp(.1, .8) * randRange(1.5, 3),
+			life = randRange(.15, .3), size0 = .03, size1 = .015,
+			color0 = { 1, .9, .6 }, color1 = { 1, .5, .15 }, opacity = 1,
+			drag = 2, lift = -4, ground = at.y - 1
+		})
+	}
 }
 
 explosionImpact3D :: proc(bonk: Explosion) {
@@ -284,6 +348,10 @@ updateFX3D :: proc(dt: f32) {
 			p.velocity.x *= .5
 			p.velocity.z *= .5
 		}
+	}
+
+	for i := len(fx.muzzleShocks) - 1; i >= 0; i -= 1 {
+		if time3D - fx.muzzleShocks[i].start >= MUZZLE_SHOCK_S do unordered_remove(&fx.muzzleShocks, i)
 	}
 
 	for i := len(fx.lights) - 1; i >= 0; i -= 1 {

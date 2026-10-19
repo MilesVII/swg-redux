@@ -62,7 +62,7 @@ Refer to `config.toml.example` for config details
 - Field of view, tilt and dithering size can be adjusted in settings
 
 ### Unit models
-The 3D renderer draws placeholder boxes unless it finds `assets/models/mcv`, `tonk` or `gun` with a `.glb`, `.gltf`, `.obj`, `.iqm` or `.m3d` extension. Models are tinted with the player color, one unit equals the distance between neighboring hex centers, the base should sit at the origin and the front should face +Z
+The 3D renderer loads `assets/3d/<unit>.obj` for a solid unit, or `assets/3d/<unit>-hull.obj` with an optional `<unit>-turret.obj`, where `<unit>` is `mcv`, `tonk` or `gun`, and falls back to placeholder boxes. Models are Z-up and X-forward with the base on the origin, turrets turn around the vertical axis through the origin. Faces without normals are flat shaded. One meter is 0.4 of the distance between neighboring hex centers, a hull reaching further than 1.25 meters from its center is shrunk to fit its hex. Models are tinted with the player color
 
 ## Credits
 - [toml_parser](https://github.com/Up05/toml_parser)
