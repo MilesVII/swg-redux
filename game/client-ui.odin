@@ -343,6 +343,7 @@ clientDrawHUD :: proc() {
 	}
 	getStatusString :: proc() -> (cstring, rl.Color) {
 		switch clientState.status {
+			case .NAMING:       return "", rl.WHITE
 			case .CONNECTING_L: return "CONNECTING TO LOBBY", rl.WHITE
 			case .LOBBY:        return "", rl.WHITE
 			case .CONNECTING:   return "CONNECTING TO GAME SERVER", rl.WHITE
@@ -381,6 +382,7 @@ clientDrawHUD :: proc() {
 		)
 	}
 
+	if clientState.status == .NAMING do drawNamePrompt()
 	if clientState.status == .LOBBY {
 		drawMenu()
 	}

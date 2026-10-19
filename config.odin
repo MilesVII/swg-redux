@@ -66,7 +66,8 @@ DEFAULT_CONFIG := Config {
 		lobbyToken = {}
 	},
 	client = {
-		name = "fops",
+		// empty makes the client ask for one
+		name = "",
 		framerate = 120,
 		server = net.IP4_Loopback,
 		lobby = net.IP4_Loopback,

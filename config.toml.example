@@ -7,7 +7,7 @@ lobby_port = 7600 # client and lobby server ports
 lobby_token = "" # token required to connect to lobby
 
 [client]
-name = "fops" # user id
+# name = "FOPS" # user id, the client asks for one when it's missing
 framerate_cap = 120
 renderer = "2d" # 2d / 3d, F2 switches in game
 server = "127.0.0.1" # server address, connect on start unless lobby is specified

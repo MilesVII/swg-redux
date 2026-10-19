@@ -22,6 +22,8 @@ EXPLOSION_CHAINING_S := f32(0.5)
 FRAG_COUNTER_DISAPPEAR_S := f32(4.2)
 
 ClientStatus :: enum {
+	// no player name yet, see drawNamePrompt
+	NAMING,
 	CONNECTING_L,
 	LOBBY,
 	CONNECTING,
@@ -174,18 +176,18 @@ client :: proc(
 
 	for view in CLIENT_VIEWS do if view.init != nil do view.init()
 	activeView = renderer3D ? &VIEW_3D : &VIEW_2D
-	loadClientSettings(name, rendererFromCommandLine)
 
-	if lobbyEnabled {
-		menuState.ngr.token = lobbyToken
-		menuState.ngr.name = name
-		menuState.lobbyAddress = lobbyAddress
-
-		clientState.status = .CONNECTING_L
-		connectToLobby(lobbyAddress, lobbyPort)
-	} else {
-		connect(server, port)
+	session = {
+		server = server,
+		port = port,
+		lobbyEnabled = lobbyEnabled,
+		lobbyAddress = lobbyAddress,
+		lobbyPort = lobbyPort,
+		lobbyToken = lobbyToken,
+		rendererFromCommandLine = rendererFromCommandLine
 	}
+	if len(name) > 0 do startClientSession()
+	else do clientState.status = .NAMING
 
 	for !rl.WindowShouldClose() {
 		for synchan.can_recv(networking.rx) {
@@ -215,9 +217,40 @@ client :: proc(
 	for view in CLIENT_VIEWS do if view.deinit != nil do view.deinit()
 }
 
+// where to connect once the player has a name
+@(private="file")
+session: struct {
+	server: net.Address,
+	port: int,
+	lobbyEnabled: bool,
+	lobbyAddress: net.Address,
+	lobbyPort: int,
+	lobbyToken: [64]rune,
+	rendererFromCommandLine: bool
+}
+
+// loads the player's settings and connects, needs clientState.name
+@(private)
+startClientSession :: proc() {
+	loadClientSettings(clientState.name, session.rendererFromCommandLine)
+
+	if session.lobbyEnabled {
+		menuState.ngr.token = session.lobbyToken
+		menuState.ngr.name = clientState.name
+		menuState.lobbyAddress = session.lobbyAddress
+
+		clientState.status = .CONNECTING_L
+		connectToLobby(session.lobbyAddress, session.lobbyPort)
+	} else {
+		clientState.status = .CONNECTING
+		connect(session.server, session.port)
+	}
+}
+
 @(private="file")
 handleClientHotkeys :: proc() {
-	if rl.IsKeyPressed(.P) {
+	// letters belong to the name being typed
+	if clientState.status != .NAMING && rl.IsKeyPressed(.P) {
 		if rl.IsKeyDown(.LEFT_CONTROL) || rl.IsKeyDown(.RIGHT_CONTROL) {
 			// keep the settings, only the code is reloaded
 			state := postfxShader.state

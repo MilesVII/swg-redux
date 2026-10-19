@@ -29,7 +29,7 @@ Refer to `config.toml.example` for config details
 `TONK` can `move`, and can `direkt fire`, attacking selected tile within range. can withstand an extra hit, medium move, medium see.
 
 > [!IMPORTANT]
-> Set up an unique user name in config.toml before connecting to a server
+> Player names identify you on a server, pick an unique one. The client asks for a name on start unless it's set with `--name` or in config.toml
 
 - `P` toggles post effects shader
 - `ctrl`+`P` reloads post effects shader from file, useful for adjusting or customizing
