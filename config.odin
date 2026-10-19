@@ -122,6 +122,11 @@ config :: proc() -> Config {
 }
 
 readFileConfig :: proc(filename: string, config: ^Config) {
+	// the toml library exits the program when it can't read the file
+	if !os.exists(filename) {
+		fmt.eprintln("no", filename, "found, using defaults")
+		return
+	}
 	section, err := toml.parse_file(filename)
 	if err.type != .None {
 		fmt.println("no config: ", err)

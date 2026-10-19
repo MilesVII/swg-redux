@@ -10,6 +10,13 @@ odin build .
 cp config.toml.example config.toml
 ```
 
+On Linux, odin links with `clang`, and the client needs X11 development files: `sudo apt install clang libx11-dev`
+
+Servers and lobbies can be built without the client, which leaves out raylib, X11 and OpenGL:
+```
+odin build . -define:HEADLESS=true
+```
+
 Specify operating mode if needed:
 ```
 swg-redux --mode client --name username --renderer 3d
