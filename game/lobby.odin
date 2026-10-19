@@ -3,8 +3,7 @@ package game
 import "core:time"
 import "core:fmt"
 import "core:net"
-import os "core:os/os2"
-import oldos "core:os"
+import "core:os"
 import synchan "core:sync/chan"
 
 import "networking"
@@ -63,16 +62,16 @@ LOBBY_SIGNAL_TERMINATE := u8(2)
 // a managed server's stdout is the pipe the lobby reads signals from,
 // so stray prints could pass for signals
 @(private="file")
-lobbySignalOutput: oldos.Handle
+lobbySignalOutput: ^os.File
 
 // keeps stdout for signals only and points everything printed at stderr instead
 reserveStdoutForLobby :: proc() {
-	lobbySignalOutput = oldos.stdout
-	oldos.stdout = oldos.stderr
+	lobbySignalOutput = os.stdout
+	os.stdout = os.stderr
 }
 
 signalLobby :: proc(signal: u8) {
-	oldos.write(lobbySignalOutput, { signal })
+	_, _ = os.write(lobbySignalOutput, { signal })
 }
 
 lobby :: proc(portRange: [2]int, local: bool, port: int, authToken: [64]rune) {
@@ -133,9 +132,11 @@ pollSessions :: proc() -> (changed: bool) {
 			}
 		}
 
-		state, waitErr := os.process_wait(session.process, 0)
-		exited := waitErr == nil && state.exited
-		if !exited && !session.terminated do continue
+		// a wait that doesn't time out has released the process handle: the server exited or can't be watched
+		_, waitErr := os.process_wait(session.process, 0)
+		general, isGeneral := waitErr.(os.General_Error)
+		running := isGeneral && general == .Timeout
+		if running && !session.terminated do continue
 
 		fmt.printfln("game server on port %d is gone", session.port)
 		if !session.ready && session.initiatorOnline {
@@ -143,12 +144,10 @@ pollSessions :: proc() -> (changed: bool) {
 		}
 		if session.ready do changed = true
 
-		if exited do _ = os.process_close(session.process)
-		else {
+		if running {
 			// signalled termination but still running, don't leave it hanging
 			_ = os.process_kill(session.process)
 			_, _ = os.process_wait(session.process)
-			_ = os.process_close(session.process)
 		}
 		os.close(session.pipeR)
 		delete(session.config.name)
@@ -244,7 +243,9 @@ requestNewGame :: proc(p: networking.Package) {
 			"--radius", fmt.tprint(newGame.mapRadius),
 			"--seed", fmt.tprint(newGame.mapSeed)
 		},
-		stdout = pipeW
+		stdout = pipeW,
+		// nil would shut the child's stderr, keep it on the lobby's console
+		stderr = os.stderr,
 	})
 	// the child has its own copy now
 	os.close(pipeW)

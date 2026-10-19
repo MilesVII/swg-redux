@@ -1,3 +1,4 @@
+#+feature using-stmt
 package toml
 
 import "dates" // I have since learned that odin has "core:time::rfc3339_to_components"

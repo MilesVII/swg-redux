@@ -7,8 +7,8 @@ import "dates"
 // Parses the file. You can use print_error(err) for error messages.
 parse_file :: proc(filename: string, allocator := context.allocator) -> (section: ^Table, err: Error) {
     context.allocator = allocator
-    blob, ok_file_read := os.read_entire_file_from_filename(filename)
-    if !ok_file_read do errf("Couldn't read file at path: \"%s\"\n", filename)
+    blob, read_err := os.read_entire_file(filename, allocator)
+    if read_err != nil do errf("Couldn't read file at path: \"%s\"\n", filename)
 
     section, err = parse(string(blob), filename, allocator)
     delete_slice(blob)

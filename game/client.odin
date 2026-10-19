@@ -91,8 +91,6 @@ ClientState :: struct {
 clientState := ClientState {
 	status = .CONNECTING,
 	uiState = .DISABLED,
-	orders = make(OrderSet),
-	storedGunOrders = make(OrderSet),
 	fragCounter = 0,
 	fragCounterTTS = 0
 }

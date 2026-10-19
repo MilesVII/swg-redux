@@ -2,7 +2,7 @@
 A turn-based wargame featuring fog of war, bestagons and indirekt fire
 
 ## Build instructions
-Requires [odin](https://odin-lang.org/docs/install/) to be installed
+Requires [odin](https://odin-lang.org/docs/install/) `dev-2026-10` or newer to be installed
 ```
 git clone https://github.com/MilesVII/swg-redux
 cd swg-redux

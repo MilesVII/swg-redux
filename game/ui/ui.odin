@@ -7,7 +7,7 @@ import "../utils"
 import "../shaded"
 
 windowSize := [2]i32 { 640, 480 }
-windowSizeF :: proc() -> [2]f32 {
+windowSizeF :: proc "contextless" () -> [2]f32 {
 	return [2]f32 { f32(windowSize.x), f32(windowSize.y) }
 }
 

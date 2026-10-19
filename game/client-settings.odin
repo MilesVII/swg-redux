@@ -154,7 +154,7 @@ writeSettingsFile :: proc() {
 		fmt.sbprintf(&b, "tilt = %.3f\n", s.tilt)
 		fmt.sbprintf(&b, "dither = %.3f\n", s.dither)
 	}
-	if !os.write_entire_file(SETTINGS_FILE, transmute([]u8)strings.to_string(b)) {
-		fmt.println("can't write", SETTINGS_FILE)
+	if err := os.write_entire_file(SETTINGS_FILE, strings.to_string(b)); err != nil {
+		fmt.println("can't write", SETTINGS_FILE, err)
 	}
 }

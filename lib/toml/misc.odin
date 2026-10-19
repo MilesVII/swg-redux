@@ -1,3 +1,4 @@
+#+feature using-stmt
 package toml
 
 import "core:os"
@@ -126,9 +127,9 @@ starts_with :: proc(a, b: string) -> bool {
 count_newlines :: proc(s: string) -> int {
     count: int
     for r, i in s {
-        count += auto_cast r == '\r'
-        count += auto_cast r == '\n'
-        count -= auto_cast starts_with(s[i:], "\r\n")
+        count += int(r == '\r')
+        count += int(r == '\n')
+        count -= int(starts_with(s[i:], "\r\n"))
     }
     return count
 }

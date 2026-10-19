@@ -62,7 +62,8 @@ DEFAULT_CONFIG := Config {
 		local = false,
 		mode = .client,
 		lobbyPort = 7600,
-		lobbyToken = hashToken("")
+		// the hash of an empty token, set in config()
+		lobbyToken = {}
 	},
 	client = {
 		name = "fops",
@@ -85,6 +86,7 @@ DEFAULT_CONFIG := Config {
 
 config :: proc() -> Config {
 	config := DEFAULT_CONFIG
+	config.common.lobbyToken = hashToken("")
 
 	readFileConfig("config.toml", &config)
 

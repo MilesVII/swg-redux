@@ -31,8 +31,8 @@ deleteObjGeometry :: proc(g: ^ObjGeometry) {
 // reads positions, normals and faces of every object in the file; materials and uvs are ignored
 // polygons are ear clipped, faces without normals get flat ones
 loadObjGeometry :: proc(path: string) -> (geometry: ObjGeometry, ok: bool) {
-	data, readOk := os.read_entire_file(path)
-	if !readOk do return {}, false
+	data, readErr := os.read_entire_file(path, context.allocator)
+	if readErr != nil do return {}, false
 	defer delete(data)
 
 	positions := make([dynamic]rl.Vector3, context.temp_allocator)
