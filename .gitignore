@@ -2,3 +2,4 @@ swg-redux*.exe
 build
 config.toml
 settings.toml
+*.blend1
