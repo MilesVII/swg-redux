@@ -80,9 +80,10 @@ drawMain :: proc() {
 	for session, i in menuState.sessions {
 		drawItemButton(
 			fmt.tprintf(
-				"R%d P%d %s%s%s",
+				"R%d P%d%s %s%s%s",
 				session.config.mapRadius,
 				session.config.playerCount,
+				session.config.turnSeconds > 0 ? fmt.tprintf(" T%s", formatTurnTime(session.config.turnSeconds)) : "",
 				session.config.name,
 				session.yours ? " [YOURS]" : "",
 				session.full ? " [IN PROGRESS]" : ""
@@ -98,7 +99,7 @@ drawMain :: proc() {
 
 @(private="file")
 drawNGRMenu :: proc() {
-	menuNavigation(4)
+	menuNavigation(5)
 
 	if rl.IsKeyPressed(.ENTER) {
 		rl.PlaySound(menuSound)
@@ -133,17 +134,28 @@ drawNGRMenu :: proc() {
 		case 3:
 			if left do menuState.ngr.playerCount -= 1
 			if rite do menuState.ngr.playerCount += 1
+		case 4:
+			if left do menuState.ngr.turnSeconds -= NGR_TURN_STEP
+			if rite do menuState.ngr.turnSeconds += NGR_TURN_STEP
 	}
 
 	if left || rite do rl.PlaySound(buttonSound)
 
 	menuState.ngr.mapRadius = clamp(menuState.ngr.mapRadius, NGR_RADIUS_RANGE[0], NGR_RADIUS_RANGE[1])
 	menuState.ngr.playerCount = clamp(menuState.ngr.playerCount, NGR_PLAYERS_RANGE[0], NGR_PLAYERS_RANGE[1])
+	menuState.ngr.turnSeconds = clamp(menuState.ngr.turnSeconds, NGR_TURN_RANGE[0], NGR_TURN_RANGE[1])
 
 	drawItemButton("< BACK", 0)
 	drawItemButton("REQUEST NEW GAME", 1)
 	drawItemButton(fmt.tprintf("MAP RADIUS: %d TILES", menuState.ngr.mapRadius), 2)
 	drawItemButton(fmt.tprintf("PLAYERS: %d", menuState.ngr.playerCount), 3)
+	turn := menuState.ngr.turnSeconds
+	drawItemButton(fmt.tprintf("TURN TIMER: %s", turn > 0 ? formatTurnTime(turn) : "OFF"), 4)
+}
+
+// minutes and seconds
+formatTurnTime :: proc(seconds: int) -> string {
+	return fmt.tprintf("%d:%02d", seconds / 60, seconds % 60)
 }
 
 

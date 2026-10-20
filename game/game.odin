@@ -49,7 +49,16 @@ PlayerState :: struct {
 	units: [dynamic]GameUnit,
 	// per grid cell, whether the player has ever seen it; server only
 	knownTerrain: []bool,
+	// enemy guns the player has seen; server only
+	knownGuns: [dynamic]RememberedGun,
 	unitIdCounter: int
+}
+
+// guns don't move, so once seen they stay on the map until their tile is seen empty
+RememberedGun :: struct {
+	pix: int,
+	id: int,
+	position: hex.Axial
 }
 
 GameState :: struct {
@@ -204,18 +213,50 @@ getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 		}
 	}
 
+	observed :: proc(state: GameState, at: hex.Axial) -> bool {
+		return state.grid.cells[hex.axialToIndex(at, state.grid.radius)].value.fog == .OBSERVED
+	}
+	remembered :: proc(player: ^PlayerState, pix: int, id: int) -> int {
+		for gun, i in player.knownGuns do if gun.pix == pix && gun.id == id do return i
+		return -1
+	}
+
 	for &p, index in reducedState.players {
 		if index == playerIndex do continue
 
 		for &unit in p.units {
-			cellIndex := hex.axialToIndex(unit.position, state.grid.radius)
-			unit.hidden = reducedState.grid.cells[cellIndex].value.fog != hex.Fog.OBSERVED
+			unit.hidden = !observed(reducedState, unit.position)
+			if unit.hidden || unit.type != .GUN do continue
+			if remembered(player, index, unit.id) < 0 {
+				append(&player.knownGuns, RememberedGun { index, unit.id, unit.position })
+			}
 		}
 
+		// out of sight units disappear, except guns the player has seen
 		unitLen := len(p.units)
 		for unitIndex := unitLen - 1; unitIndex >= 0; unitIndex -= 1 {
-			if p.units[unitIndex].hidden do unordered_remove(&p.units, unitIndex)
+			unit := p.units[unitIndex]
+			if unit.hidden && !(unit.type == .GUN && remembered(player, index, unit.id) >= 0) {
+				unordered_remove(&p.units, unitIndex)
+			}
 		}
+	}
+
+	// guns destroyed out of sight stay where they were seen until their tile is seen empty
+	for i := len(player.knownGuns) - 1; i >= 0; i -= 1 {
+		gun := player.knownGuns[i]
+		_, exists := findUnitById(reducedState.players[gun.pix].units[:], gun.id)
+		if exists do continue
+		if observed(reducedState, gun.position) {
+			unordered_remove(&player.knownGuns, i)
+			continue
+		}
+		append(&reducedState.players[gun.pix].units, GameUnit {
+			id = gun.id,
+			position = gun.position,
+			type = .GUN,
+			hidden = true
+		})
 	}
 
 	return reducedState
@@ -228,6 +269,7 @@ reduceExplosionsToVisible :: proc(reducedState: ^GameState, playerIx: int, explo
 		bonk := bonk
 		if (playerIx == bonk.pix) {
 			bonk.pix = 1
+			bonk.side = -1
 			append(&redex, bonk)
 			continue
 		} else {
@@ -268,16 +310,25 @@ cloneState :: proc(state: GameState) -> GameState {
 	for &p in newState.players {
 		p.units = slice.clone_to_dynamic(p.units[:])
 		p.knownTerrain = slice.clone(p.knownTerrain)
+		// the original keeps the memory, see getStateForPlayer
+		p.knownGuns = nil
 	}
 	newState.grid.cells = slice.clone(state.grid.cells)
 
 	return newState
 }
 
-drawUnit :: proc(position: hex.Axial, unit: GameUnitType, gold: int, color: rl.Color, highlight := false) -> bool {
+// `remembered` draws a faded unit that is out of sight, see RememberedGun
+drawUnit :: proc(position: hex.Axial, unit: GameUnitType, gold: int, color: rl.Color, highlight := false, remembered := false) -> bool {
 	hovered := ui.pointedCell == position
 	vx := hex.vertesex(position, hovered ? 1 : .8)
-	rl.DrawTriangleFan(&vx[0], 6, rl.BLACK)
+	color := color
+	background := rl.BLACK
+	if remembered {
+		color.a = 110
+		background.a = 110
+	}
+	rl.DrawTriangleFan(&vx[0], 6, background)
 
 	switch unit {
 		case .GUN:

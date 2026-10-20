@@ -55,7 +55,9 @@ GridCell :: struct {
 	fog: Fog,
 	gold: int,
 	// continuous height behind the terrain type, 0 for unexplored cells
-	elevation: f32
+	elevation: f32,
+	// wreck of an MCV that carried gold: blocks the tile, digging it gives one gold
+	scrap: bool
 }
 
 grid :: proc(radius: int, $Value: typeid) -> Grid(Value) {
@@ -153,6 +155,21 @@ axialToIndex :: proc(v: Axial, radius: int) -> int {
 
 isWithinGrid :: proc(cell: Axial, gridRadius: int) -> bool {
 	return distance(cell, {0, 0}) <= gridRadius
+}
+
+// index into AXIAL_NBS of the side of `at` that faces `from`
+sideTowards :: proc(at: Axial, from: Axial) -> int {
+	direction := axialToWorld(from) - axialToWorld(at)
+	best := 0
+	bestDot := min(f32)
+	for nb, k in AXIAL_NBS {
+		d := rl.Vector2DotProduct(rl.Vector2Normalize(axialToWorld(nb)), direction)
+		if d > bestDot {
+			bestDot = d
+			best = k
+		}
+	}
+	return best
 }
 
 nbs :: proc(cell: Axial) -> [7]Axial {

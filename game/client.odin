@@ -111,7 +111,9 @@ Explosion :: struct {
 	// the hit moment has been shown by the view
 	impacted: bool,
 	// the hit has been applied to the state
-	bonked: bool
+	bonked: bool,
+	// tile side the shell came from, -1 when unknown, see ExplosionBufferEntry
+	side: int
 }
 
 ClientState :: struct {
@@ -133,7 +135,71 @@ ClientState :: struct {
 	explosions: [dynamic]Explosion,
 	fragCounter: int,
 	fragCounterTTS: f32,
-	cameraControlsEnabled: bool
+	cameraControlsEnabled: bool,
+	// GetTime() when the current turn runs out, 0 without a turn timer
+	turnDeadline: f64,
+	// orders went out this turn, SUBMIT is gone until the next update
+	ordersSent: bool
+}
+
+// a red sector flashing once outside the side of a hit tile that faces the gun that fired
+CounterBatterySign :: struct {
+	at: hex.Axial,
+	side: int,
+	start: f64
+}
+@(private)
+counterBatterySigns: [dynamic]CounterBatterySign
+COUNTER_BATTERY_S :: 1.1
+
+// fades shapes in and out without blending, see shaders/dither-fs.glsl
+@(private)
+ditherShader: rl.Shader
+
+// coverage of a sign over its short life: a quick flash, then a dithered fade
+@(private)
+counterBatteryCoverage :: proc(sign: CounterBatterySign) -> f32 {
+	t := f32((rl.GetTime() - sign.start) / COUNTER_BATTERY_S)
+	if t < 0 || t >= 1 do return 0
+	if t < .1 do return t / .1
+	fade := 1 - (t - .1) / .9
+	return fade * fade
+}
+
+// quad outside the tile edge facing `side`, widening away from the tile
+@(private)
+counterBatteryQuad :: proc(sign: CounterBatterySign) -> [4]rl.Vector2 {
+	center := hex.axialToWorld(sign.at)
+	toward := rl.Vector2Normalize(hex.axialToWorld(hex.AXIAL_NBS[sign.side]))
+	inner := hex.vertesex(sign.at, 1.06)
+	outer := hex.vertesex(sign.at, 1.9)
+	edge := 0
+	best := min(f32)
+	for k in 0..<6 {
+		middle := (inner[k] + inner[(k + 1) % 6]) * .5 - center
+		if d := rl.Vector2DotProduct(rl.Vector2Normalize(middle), toward); d > best {
+			best = d
+			edge = k
+		}
+	}
+	next := (edge + 1) % 6
+	return { inner[edge], outer[edge], outer[next], inner[next] }
+}
+
+@(private="file")
+pruneCounterBatterySigns :: proc() {
+	for i := len(counterBatterySigns) - 1; i >= 0; i -= 1 {
+		if rl.GetTime() - counterBatterySigns[i].start >= COUNTER_BATTERY_S do ordered_remove(&counterBatterySigns, i)
+	}
+}
+
+// submitted this long before the deadline, the server allows a few seconds more
+AUTO_SUBMIT_LEAD :: 1.0
+
+// orders can be prepared on your turn and while others play theirs
+@(private)
+canPlanOrders :: proc() -> bool {
+	return clientState.status == .PLAYING || clientState.status == .WAITING
 }
 
 @(private)
@@ -221,6 +287,7 @@ client :: proc(
 
 	vcrFont = rl.LoadFontEx("assets/VCR_OSD_MONO.ttf", 16, nil, 0)
 
+	ditherShader = rl.LoadShader(nil, "shaders/dither-fs.glsl")
 	for view in CLIENT_VIEWS do if view.init != nil do view.init()
 	activeView = renderer3D ? &VIEW_3D : &VIEW_2D
 
@@ -243,7 +310,11 @@ client :: proc(
 		}
 		utils.updateFlicker()
 
-		if clientState.status != .PLAYING do clientState.uiState = .DISABLED
+		if !canPlanOrders() do clientState.uiState = .DISABLED
+		// out of time: send whatever is queued
+		if clientState.status == .PLAYING && !clientState.ordersSent && clientState.turnDeadline > 0 {
+			if rl.GetTime() >= clientState.turnDeadline - AUTO_SUBMIT_LEAD do clientSayOrders()
+		}
 		ui.updateWindow()
 		handleClientHotkeys()
 
@@ -251,6 +322,7 @@ client :: proc(
 		utils.cursorHoverBegin()
 		activeView.update(!clientState.cameraControlsEnabled, inputBlocked)
 		updateExplosions()
+		pruneCounterBatterySigns()
 		clientPlanFrame(inputBlocked)
 		ui.drawFrame(activeView.scene, clientDrawHUD, clientPostFX)
 		utils.cursorHoverEnd()
@@ -384,6 +456,7 @@ updateExplosions :: proc() {
 		if !bonk.impacted && bonk.elapsedTime > EXPLOSION_HATTRICK_S {
 			bonk.impacted = true
 			if activeView.onExplosionImpact != nil do activeView.onExplosionImpact(bonk)
+			if bonk.side >= 0 do append(&counterBatterySigns, CounterBatterySign { bonk.at, bonk.side, rl.GetTime() })
 		}
 
 		onGrid := hex.isWithinGrid(bonk.at, clientState.game.grid.radius)
@@ -525,7 +598,11 @@ onUpdate :: proc(payload: []u8) {
 
 	rl.PlaySound(menuSound)
 	clientState.cameraControlsEnabled = true
-	clear(&clientState.orders)
+	// queued orders survive other players' turns, they're cleared when submitted
+	clientState.ordersSent = false
+	meta := clientUpdateBuffer.meta
+	running := meta.turnLimit > 0 && clientUpdateBuffer.gameStarted && !clientUpdateBuffer.gameOver
+	clientState.turnDeadline = running ? rl.GetTime() + f64(meta.turnTimeLeft) : 0
 	setNotice("")
 	clientState.myPix = clientUpdateBuffer.meta.yourId
 
@@ -552,6 +629,7 @@ onUpdate :: proc(payload: []u8) {
 				at = bonk.position,
 				lethal = bonk.lethal,
 				highlight = bonk.pix == 1,
+				side = bonk.side,
 				elapsedTime = 0,
 				impacted = false,
 				bonked = false
@@ -576,8 +654,20 @@ applyBufferedUpdate :: proc() {
 	clientState.winnerName = clientUpdateBuffer.winnerBadge
 	clientUpdateBuffer.winnerBadge = ""
 
-	applyStoredGunOrders()
+	pruneOrders()
 	promoteStatusChange()
+}
+
+// drops orders of units that are gone
+@(private="file")
+pruneOrders :: proc() {
+	if clientState.myPix < 0 || clientState.myPix >= len(clientState.game.players) do return
+	units := clientState.game.players[clientState.myPix].units[:]
+	gone := make([dynamic]int, context.temp_allocator)
+	for unitId in clientState.orders {
+		if _, found := findUnitById(units, unitId); !found do append(&gone, unitId)
+	}
+	for unitId in gone do delete_key(&clientState.orders, unitId)
 }
 
 @(private="file")
@@ -589,10 +679,11 @@ promoteStatusChange :: proc() {
 			clientState.status = .NOT_FULL
 		case clientUpdateBuffer.meta.activeIsYou:
 			clientState.status = .PLAYING
-			clientState.uiState = .FREE
 		case:
 			clientState.status = .WAITING
 	}
+	// keeps a placement that's in progress
+	if canPlanOrders() && clientState.uiState == .DISABLED do clientState.uiState = .FREE
 }
 
 @(private)
@@ -613,6 +704,11 @@ clientSayOrders :: proc() {
 			clientState.storedGunOrders[unitId] = list.items[0]
 		}
 	}
+
+	// the next turn starts from scratch, except guns keep their targets
+	clear(&clientState.orders)
+	applyStoredGunOrders()
+	clientState.ordersSent = true
 }
 
 @(private="file")

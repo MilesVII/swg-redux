@@ -1,6 +1,7 @@
 package game
 
 import rl "vendor:raylib"
+import rlgl "vendor:raylib/rlgl"
 
 import "ui"
 import "hex"
@@ -40,19 +41,27 @@ scene2D :: proc() {
 
 	ui.drawGrid(clientState.game.grid)
 
+	// scrap: a dark MCV silhouette
+	for cell in clientState.game.grid.cells {
+		if !cell.visible || !cell.value.scrap do continue
+		ui.drawTriangle(cell.position.axial, true, SCRAP_COLOR_2D, .7)
+		ui.drawTriangle(cell.position.axial, false, SCRAP_COLOR_2D, .7)
+	}
+
 	cell, hovering := hoverCell.?
 	if hovering do ui.drawCellBorder(cell, .2, rl.WHITE)
 
 	for &player, pix in clientState.game.players {
 		for &unit in player.units {
 			ordered := unit.id in clientState.orders
-			highlight := clientState.status == .PLAYING && pix == clientState.myPix && !ordered
+			highlight := canPlanOrders() && pix == clientState.myPix && !ordered
 			drawUnit(
 				unit.position,
 				unit.type,
 				unit.gold,
 				player.color,
-				highlight
+				highlight,
+				unit.hidden
 			)
 		}
 	}
@@ -65,6 +74,7 @@ scene2D :: proc() {
 	}
 
 	drawOverlays2D()
+	drawCounterBatterySigns2D()
 }
 
 @(private="file")
@@ -87,6 +97,27 @@ drawBackground2D :: proc() {
 		0,
 		rl.WHITE
 	)
+	rl.EndShaderMode()
+}
+
+@(private="file")
+SCRAP_COLOR_2D :: rl.Color { 40, 40, 44, 255 }
+
+@(private="file")
+drawCounterBatterySigns2D :: proc() {
+	if len(counterBatterySigns) == 0 do return
+	scale := f32(2)
+	rl.SetShaderValue(ditherShader, rl.GetShaderLocation(ditherShader, "ditherScale"), &scale, .FLOAT)
+	rl.BeginShaderMode(ditherShader)
+	rlgl.DisableBackfaceCulling()
+	rlgl.Begin(rlgl.TRIANGLES)
+	for sign in counterBatterySigns {
+		q := counterBatteryQuad(sign)
+		rlgl.Color4ub(255, 40, 30, u8(255 * counterBatteryCoverage(sign)))
+		for i in ([]int { 0, 1, 2, 0, 2, 3 }) do rlgl.Vertex2f(q[i].x, q[i].y)
+	}
+	rlgl.End()
+	rlgl.EnableBackfaceCulling()
 	rl.EndShaderMode()
 }
 

@@ -3,7 +3,6 @@ package game
 import "core:fmt"
 import "core:time"
 import "core:net"
-import "core:slice"
 import synchan "core:sync/chan"
 
 import "hex"
@@ -36,7 +35,10 @@ Session :: struct {
 	// set once the game is over and everyone left, or nobody showed up for a while; ends the main loop
 	closing: bool,
 	// when the last player left, or the server started
-	emptySince: time.Time
+	emptySince: time.Time,
+	// 0 for no limit
+	turnLimit: time.Duration,
+	turnStarted: time.Time
 }
 
 @(private="file")
@@ -49,12 +51,15 @@ explosionsBuffer: [dynamic]ExplosionBufferEntry
 SERVER_IDLE_SKIP := time.Millisecond * 100
 // how long a game may sit without any player connected
 ABANDONED_TIMEOUT :: time.Hour
+// a late client still gets its orders in, it submits a moment before its own deadline
+TURN_GRACE :: 3 * time.Second
 
-server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, local: bool, port: int, lobbyPort: int) {
+server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, turnSeconds: int, local: bool, port: int, lobbyPort: int) {
 	session = Session {
 		activePlayerIx = -1,
 		players = make([]Player, playerCount),
-		managed = managed
+		managed = managed,
+		turnLimit = time.Duration(max(turnSeconds, 0)) * time.Second
 	}
 
 	if managed {
@@ -94,6 +99,13 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, lo
 		for synchan.can_recv(networking.rx) {
 			data, ok := synchan.recv(networking.rx)
 			if ok do processPackage(data)
+		}
+
+		// out of time: the turn passes without orders
+		if session.turnLimit > 0 && gameStarted() && !session.over && time.since(session.turnStarted) > session.turnLimit + TURN_GRACE {
+			utils.log("turn timed out")
+			clear(&serverOrderBuffer)
+			endTurn(serverOrderBuffer)
 		}
 
 		// abandoned games go down after a while, finished ones as soon as they're empty
@@ -152,20 +164,26 @@ processPackage :: proc(p: networking.Package) {
 
 			clear(&serverOrderBuffer)
 			if !decode(p.payload, &serverOrderBuffer) do break
-
-			executeOrders(session.activePlayerIx, serverOrderBuffer)
-			bonkUnits()
-
-			session.over = gameOver()
-
-			if !session.over do for {
-				nextPlayer()
-				if activeUnitsLeft(session.activePlayerIx) do break
-			}
-
-			broadcastUpdates()
-			clear(&explosionsBuffer)
+			endTurn(serverOrderBuffer)
 	}
+}
+
+// resolves the active player's orders and hands the turn to the next player
+@(private="file")
+endTurn :: proc(orders: OrderSet) {
+	executeOrders(&session.game, session.activePlayerIx, orders, &explosionsBuffer)
+	bonkUnits(&session.game, explosionsBuffer[:])
+
+	session.over = gameOver(&session.game)
+
+	if !session.over do for {
+		nextPlayer()
+		if activeUnitsLeft(&session.game, session.activePlayerIx) do break
+	}
+	session.turnStarted = time.now()
+
+	broadcastUpdates()
+	clear(&explosionsBuffer)
 }
 
 @(private="file")
@@ -232,6 +250,7 @@ startGameIfFull :: proc() {
 
 	if session.managed do signalLobby(LOBBY_SIGNAL_FULL)
 	session.activePlayerIx = 0
+	session.turnStarted = time.now()
 	broadcastUpdates()
 }
 
@@ -252,7 +271,7 @@ getActivePlayerName :: proc() -> string {
 @(private="file")
 getWinnerName :: proc() -> string {
 	for player, pix in session.players {
-		if activeUnitsLeft(pix) {
+		if activeUnitsLeft(&session.game, pix) {
 			name, named := player.id.?
 			return named ? name : NAME_PLACEHOLDER
 		}
@@ -266,6 +285,12 @@ sendNotice :: proc(socket: net.TCP_Socket, notice: string) {
 		message = .GENERAL,
 	}
 	networking.say(socket, &header, encode(notice))
+}
+
+@(private="file")
+turnTimeLeft :: proc() -> f32 {
+	if session.turnLimit == 0 || !gameStarted() || session.over do return 0
+	return max(f32(time.duration_seconds(session.turnLimit - time.since(session.turnStarted))), 0)
 }
 
 @(private="file")
@@ -314,7 +339,9 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 			activeIsYou = playerIndex == session.activePlayerIx,
 			yourColor = session.game.players[playerIndex].color,
 			yourId = playerIndex,
-			currentPlayerBadge = getActivePlayerName()
+			currentPlayerBadge = getActivePlayerName(),
+			turnLimit = f32(time.duration_seconds(session.turnLimit)),
+			turnTimeLeft = turnTimeLeft()
 		},
 		explosions = explosions[:],
 		gameStarted = gameStarted(),
@@ -323,149 +350,6 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	}
 
 	networking.say(socket, &header, encode(update))
-}
-
-// orders run in unit id order so results don't depend on map iteration order
-// units built during this turn can't act until the next one
-executeOrders :: proc(playerIx: int, orders: OrderSet) {
-	idLimit := session.game.players[playerIx].unitIdCounter
-
-	unitIds := make([dynamic]int, 0, len(orders), context.temp_allocator)
-	for unitId in orders do if unitId < idLimit do append(&unitIds, unitId)
-	slice.sort(unitIds[:])
-
-	for unitId in unitIds {
-		list := orders[unitId]
-		queued := listedOrders(&list)
-		unit, found := findUnitById(session.game.players[playerIx].units[:], unitId)
-		if !found do continue
-		// only MCVs may queue, and only builds or only digs; anything else runs its first order
-		if len(queued) > 1 && !multipleOrdersAllowed(unit.type, queued) do queued = queued[:1]
-		for order in queued do executeOrder(playerIx, unitId, order)
-	}
-}
-
-executeOrder :: proc(playerIx: int, unitId: int, order: Order) {
-	unit, ok := findUnitById(session.game.players[playerIx].units[:], unitId)
-	if !ok do return
-	if !orderAllowed(unit^, order) {
-		utils.log("rejected order ", order, " for unit ", unitId)
-		return
-	}
-
-	switch order.type {
-		case .BUILD:
-			unit.gold -= 1
-
-			newUnit := GameUnit {
-				position = order.target,
-				type = order.targetUnitType,
-				id = session.game.players[playerIx].unitIdCounter,
-				gold = order.targetUnitType == .TONK ? 2 : 0
-			}
-			// invalidates `unit`
-			append(&session.game.players[playerIx].units, newUnit)
-			session.game.players[playerIx].unitIdCounter += 1
-		case .DIG:
-			cellIx := hex.axialToIndex(order.target, session.game.grid.radius)
-			session.game.grid.cells[cellIx].value.gold -= 1
-			unit.gold += 1
-		case .DIREKT:
-			entry := ExplosionBufferEntry {
-				position = order.target,
-				pix = playerIx
-			}
-			append(&explosionsBuffer, entry)
-		case .INDIREKT:
-			utils.shuffle(BONK_OFFSETS[:])
-
-			for i in 0..<INDIREKT_BARRAGE_SIZE {
-				entry := ExplosionBufferEntry {
-					position = order.target + BONK_OFFSETS[i],
-					pix = playerIx
-				}
-				append(&explosionsBuffer, entry)
-			}
-		case .MOVE:
-			unit.position = order.target
-	}
-}
-
-// mirrors the checks the client does before placing an order
-@(private="file")
-orderAllowed :: proc(unit: GameUnit, order: Order) -> bool {
-	grid := session.game.grid
-	target := order.target
-	onGrid := hex.isWithinGrid(target, grid.radius)
-	distance := hex.distance(unit.position, target)
-
-	cellAt :: proc(grid: GameGrid, at: hex.Axial) -> hex.GridCell {
-		return grid.cells[hex.axialToIndex(at, grid.radius)].value
-	}
-
-	switch order.type {
-		case .BUILD:
-			validType := order.targetUnitType >= min(GameUnitType) && order.targetUnitType <= max(GameUnitType)
-			return validType &&
-				unit.type == .MCV &&
-				unit.gold > 0 &&
-				distance == 1 &&
-				onGrid &&
-				cellAt(grid, target).walkable &&
-				noUnitsAt(target, session.game.players)
-		case .DIG:
-			return unit.type == .MCV &&
-				unit.gold < 3 &&
-				distance == 1 &&
-				onGrid &&
-				cellAt(grid, target).gold > 0
-		case .DIREKT:
-			return unit.type == .TONK &&
-				distance <= ARANGE[.TONK] &&
-				hex.isVisible(grid, unit.position, target)
-		case .INDIREKT:
-			return unit.type == .GUN &&
-				distance <= ARANGE[.GUN]
-		case .MOVE:
-			if MOVING[unit.type] == 0 || target == unit.position do return false
-			if !noUnitsAt(target, session.game.players) do return false
-			allowedCells := hex.findWalkableOutline(grid, unit.position, MOVING[unit.type], context.temp_allocator)
-			return utils.includes(allowedCells, &target)
-	}
-	return false
-}
-
-bonkUnits :: proc() {
-	for &bonk in explosionsBuffer {
-		if !hex.isWithinGrid(bonk.position, session.game.grid.radius) do continue
-
-		uix, pix, found := findUnitAt(&session.game, bonk.position)
-		if found {
-			unit := &session.game.players[pix].units[uix]
-
-			if unit.type == .TONK && unit.gold > 1 do unit.gold -= 1
-			else {
-				unordered_remove(&session.game.players[pix].units, uix)
-				bonk.lethal = true
-			}
-		}
-	}
-}
-
-gameOver :: proc() -> bool {
-	ablePlayers := 0
-	for _, pix in session.game.players {
-		if activeUnitsLeft(pix) do ablePlayers += 1
-	}
-
-	return ablePlayers <= 1
-}
-
-activeUnitsLeft :: proc(playerIx: int) -> bool {
-	for unit in session.game.players[playerIx].units {
-		if unit.type == .MCV do return true
-	}
-	return false
 }
 
 nextPlayer :: proc() {

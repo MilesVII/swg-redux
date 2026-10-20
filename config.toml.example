@@ -17,6 +17,7 @@ lobby = "127.0.0.1" # lobby address
 players = 2
 radius = 16 # map radius
 # seed = 0 # random unless specified
+turn_time = 0 # seconds per turn, 0 for no limit
 
 [lobby]
 game_ports = "7420-7500"

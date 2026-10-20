@@ -17,6 +17,8 @@ Servers and lobbies can be built without the client, which leaves out raylib, X1
 odin build . -define:HEADLESS=true
 ```
 
+Game rules are covered by tests: `odin test tests`
+
 Specify operating mode if needed:
 ```
 swg-redux --mode client --name username --renderer 3d
@@ -37,6 +39,12 @@ Refer to `config.toml.example` for config details
 `REC` can `move` fast and sees very far. no shoot.
 `GUN` is a static emplacement. can `indirekt fire` far, attacking three random tiles within radius. no move, can't see.
 `TONK` can `move`, and can `direkt fire`, attacking selected tile within range. can withstand an extra hit, medium move, medium see.
+
+An `MCV` destroyed while carrying gold leaves `scrap` that blocks its tile. Digging it gives one gold, any hit destroys it.
+Enemy guns stay on the map once spotted, until their tile is seen empty.
+Tiles hit by indirekt fire flash a red sector on the side the shells came from.
+Orders can be prepared while other players make theirs, they are submitted on your turn.
+Games can have a turn timer, set when requesting a game in a lobby or with `turn_time` in config.toml. When it runs out, the orders prepared so far are submitted.
 
 > [!IMPORTANT]
 > Player names identify you on a server, pick an unique one. The client asks for a name on start unless it's set with `--name` or in config.toml

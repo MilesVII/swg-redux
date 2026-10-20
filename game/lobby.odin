@@ -16,11 +16,15 @@ NewGameRequest :: struct {
 	name: string,
 	playerCount: int,
 	mapSeed: i64,
-	mapRadius: int
+	mapRadius: int,
+	// seconds per turn, 0 for no limit
+	turnSeconds: int
 }
 
 NGR_RADIUS_RANGE :: [2]int { 4, 64 }
 NGR_PLAYERS_RANGE :: [2]int { 2, 6 }
+NGR_TURN_RANGE :: [2]int { 0, 3600 }
+NGR_TURN_STEP :: 30
 
 GameSession :: struct {
 	port: int,
@@ -206,7 +210,8 @@ requestNewGame :: proc(p: networking.Package) {
 
 	radiusOk := newGame.mapRadius >= NGR_RADIUS_RANGE[0] && newGame.mapRadius <= NGR_RADIUS_RANGE[1]
 	playersOk := newGame.playerCount >= NGR_PLAYERS_RANGE[0] && newGame.playerCount <= NGR_PLAYERS_RANGE[1]
-	if !radiusOk || !playersOk {
+	turnOk := newGame.turnSeconds >= NGR_TURN_RANGE[0] && newGame.turnSeconds <= NGR_TURN_RANGE[1]
+	if !radiusOk || !playersOk || !turnOk {
 		sendNotice(p.socket, "INVALID GAME PARAMETERS")
 		return
 	}
@@ -241,7 +246,8 @@ requestNewGame :: proc(p: networking.Package) {
 			"--port", fmt.tprint(port),
 			"--players", fmt.tprint(newGame.playerCount),
 			"--radius", fmt.tprint(newGame.mapRadius),
-			"--seed", fmt.tprint(newGame.mapSeed)
+			"--seed", fmt.tprint(newGame.mapSeed),
+			"--turn-time", fmt.tprint(newGame.turnSeconds)
 		},
 		stdout = pipeW,
 		// nil would shut the child's stderr, keep it on the lobby's console

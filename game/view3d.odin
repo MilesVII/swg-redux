@@ -272,6 +272,7 @@ scene3D :: proc() {
 
 	syncTerrain3D()
 	syncUnits3D(dt)
+	syncScraps3D()
 	updateFX3D(dt)
 
 	rl.BeginMode3D(camera3D)
@@ -288,6 +289,7 @@ scene3D :: proc() {
 		drawUnits3D()
 		drawOverlays3D()
 		drawFX3D()
+		drawCounterBatterySigns3D()
 	}
 	rl.EndMode3D()
 }

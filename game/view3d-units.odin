@@ -92,8 +92,24 @@ UnitVisual :: struct {
 	turretTarget: f32,
 	fadeStart: f32,
 	fadingOut: bool,
-	seen: bool
+	seen: bool,
+	// out of sight but remembered, drawn faded
+	hidden: bool
 }
+
+// wreck of an MCV, see GridCell.scrap
+@(private="file")
+ScrapVisual :: struct {
+	fadeStart: f32,
+	fadingOut: bool,
+	seen: bool,
+	heading: f32
+}
+@(private="file")
+SCRAP_COLOR :: rl.Color { 22, 22, 24, 255 }
+// remembered units are drawn about as faded as remembered terrain
+@(private="file")
+REMEMBERED_COVERAGE :: COVERAGE_KNOWN
 
 @(private="file")
 units: struct {
@@ -102,7 +118,10 @@ units: struct {
 	cube: rl.Mesh,
 	models: [GameUnitType]Maybe(UnitModel),
 	// keyed by player index and unit id
-	visuals: map[[2]int]UnitVisual
+	visuals: map[[2]int]UnitVisual,
+	// assets/3d/scrap.obj, black MCVs without it
+	scrapModel: Maybe(rl.Mesh),
+	scraps: map[hex.Axial]ScrapVisual
 }
 
 initUnits3D :: proc() {
@@ -132,6 +151,12 @@ initUnits3D :: proc() {
 		}
 		units.models[type] = model
 	}
+
+	if scrap, ok := loadObjGeometry("assets/3d/scrap.obj"); ok {
+		defer deleteObjGeometry(&scrap)
+		scaleObjGeometry(&scrap, min(MODEL_SCALE, MODEL_FIT_RADIUS / max(horizontalExtent(scrap), 1e-3)))
+		units.scrapModel = uploadObjGeometry(scrap)
+	}
 }
 
 deinitUnits3D :: proc() {
@@ -141,10 +166,12 @@ deinitUnits3D :: proc() {
 			if m.hasTurret do rl.UnloadMesh(m.turret)
 		}
 	}
+	if scrap, ok := units.scrapModel.?; ok do rl.UnloadMesh(scrap)
 	rl.UnloadMesh(units.cube)
 	rl.UnloadShader(units.shader)
 	for _, v in units.visuals do delete(v.path)
 	delete(units.visuals)
+	delete(units.scraps)
 }
 
 @(private="file")
@@ -295,6 +322,7 @@ syncUnits3D :: proc(dt: f32) {
 					type = unit.type,
 					color = player.color,
 					gold = unit.gold,
+					hidden = unit.hidden,
 					cell = unit.position,
 					path = path,
 					moveStart = -1000,
@@ -307,6 +335,7 @@ syncUnits3D :: proc(dt: f32) {
 			}
 
 			v.seen = true
+			v.hidden = unit.hidden
 			v.type = unit.type
 			v.color = player.color
 			v.gold = unit.gold
@@ -389,6 +418,64 @@ drawShape :: proc(type: GameUnitType, pose: Pose, scale: f32, color: rl.Color, c
 	}
 }
 
+// follows the scrap in the shown map, fading it in and out like units
+syncScraps3D :: proc() {
+	for _, &s in units.scraps do s.seen = false
+	for cell in clientState.game.grid.cells {
+		if !cell.visible || !cell.value.scrap do continue
+		at := cell.position.axial
+		s, exists := &units.scraps[at]
+		if !exists {
+			// a fixed but varied heading per tile
+			heading := f32((at.x * 73 + at.y * 151) % 360) * rl.DEG2RAD
+			units.scraps[at] = ScrapVisual { fadeStart = time3D, seen = true, heading = heading }
+			continue
+		}
+		s.seen = true
+		if s.fadingOut {
+			s.fadingOut = false
+			s.fadeStart = time3D
+		}
+	}
+
+	gone := make([dynamic]hex.Axial, context.temp_allocator)
+	for at, &s in units.scraps {
+		if !s.seen && !s.fadingOut {
+			s.fadingOut = true
+			s.fadeStart = time3D
+		}
+		if s.fadingOut && time3D - s.fadeStart >= UNIT_FADE_S do append(&gone, at)
+	}
+	for at in gone do delete_key(&units.scraps, at)
+}
+
+@(private="file")
+drawScraps3D :: proc() {
+	revealed := clientState.status == .FINISH
+	for at, s in units.scraps {
+		t := clamp((time3D - s.fadeStart) / UNIT_FADE_S, 0, 1)
+		coverage := s.fadingOut ? 1 - t : t
+		// scrap on remembered terrain is as faded as the terrain
+		if !revealed && hex.isWithinGrid(at, clientState.game.grid.radius) {
+			fog := clientState.game.grid.cells[hex.axialToIndex(at, clientState.game.grid.radius)].value.fog
+			if fog != .OBSERVED do coverage *= COVERAGE_KNOWN
+		}
+		if coverage <= 0 do continue
+
+		pose := Pose { cellTop3D(at), s.heading, 0 }
+		mesh, hasModel := units.scrapModel.?
+		if !hasModel {
+			drawShape(.MCV, pose, 1, SCRAP_COLOR, coverage, 0)
+			continue
+		}
+		setUnitUniforms(coverage, 0)
+		material := units.material
+		material.maps[rl.MaterialMapIndex.ALBEDO].color = SCRAP_COLOR
+		position := pose.position
+		rl.DrawMesh(mesh, material, rl.MatrixTranslate(position.x, position.y, position.z) * rl.MatrixRotateY(pose.heading))
+	}
+}
+
 // slots of the bars above units: gold for MCVs, hit points for TONKs
 @(private="file")
 BAR_CAPACITY := [GameUnitType]int { .TONK = 2, .GUN = 0, .MCV = 3, .REC = 0 }
@@ -437,7 +524,7 @@ drawUnits3D :: proc() {
 	setLightUniforms3D(units.shader)
 
 	for key, v in units.visuals {
-		coverage := coverageOf(v)
+		coverage := coverageOf(v) * (v.hidden ? REMEMBERED_COVERAGE : 1)
 		if coverage <= 0 do continue
 		pose := poseOf(v)
 		hovered := v.cell == ui.pointedCell && !v.fadingOut
@@ -446,6 +533,8 @@ drawUnits3D :: proc() {
 		if v.type == .REC do turret = time3D * RECON_SPIN + f32(key[1]) * 1.7
 		drawShape(v.type, pose, hovered ? 1.12 : 1, v.color, coverage, 0, turret)
 	}
+
+	drawScraps3D()
 
 	// units that orders will build
 	pulse := (math.sin(utils.flicker * utils.TAU) + 1) * .5
@@ -460,7 +549,7 @@ drawUnits3D :: proc() {
 // cells of your own units that still wait for orders
 unitsAwaitingOrders3D :: proc() -> []hex.Axial {
 	result := make([dynamic]hex.Axial, context.temp_allocator)
-	if clientState.status != .PLAYING || clientState.myPix >= len(clientState.game.players) do return result[:]
+	if !canPlanOrders() || clientState.myPix >= len(clientState.game.players) do return result[:]
 	for unit in clientState.game.players[clientState.myPix].units {
 		if !(unit.id in clientState.orders) do append(&result, unit.position)
 	}

@@ -12,7 +12,11 @@ TurnMessage :: struct {
 	activeIsYou: bool,
 	currentPlayerBadge: string,
 	yourColor: rl.Color,
-	yourId: int
+	yourId: int,
+	// seconds per turn, 0 for no limit
+	turnLimit: f32,
+	// seconds left of the current turn when the update was sent
+	turnTimeLeft: f32
 }
 
 // what the server sends a player after every change
@@ -35,7 +39,9 @@ Update :: struct {
 ExplosionBufferEntry :: struct {
 	position: hex.Axial,
 	pix: int,
-	lethal: bool
+	lethal: bool,
+	// side of the hit tile the shell came from, an index into hex.AXIAL_NBS; -1 when unknown or own
+	side: int
 }
 
 // u32 cell index, rgba color, flags, gold, u16 elevation
@@ -49,6 +55,8 @@ FLAG_SEETHROUGH :: u8(2)
 FLAG_MAIN_AREA :: u8(4)
 @(private="file")
 FOG_SHIFT :: 3
+@(private="file")
+FLAG_SCRAP :: u8(1 << 5)
 
 @(private="file")
 packCell :: proc(buffer: []u8, index: int, value: hex.GridCell) {
@@ -62,6 +70,7 @@ packCell :: proc(buffer: []u8, index: int, value: hex.GridCell) {
 	if value.seethrough do flags |= FLAG_SEETHROUGH
 	if value.mainArea do flags |= FLAG_MAIN_AREA
 	flags |= u8(value.fog) << FOG_SHIFT
+	if value.scrap do flags |= FLAG_SCRAP
 	buffer[8] = flags
 	buffer[9] = u8(clamp(value.gold, 0, 255))
 	endian.put_u16(buffer[10:12], .Little, u16(clamp(value.elevation, 0, 1) * 65535 + .5))
@@ -76,6 +85,7 @@ unpackCell :: proc(buffer: []u8) -> (index: int, value: hex.GridCell) {
 	value.walkable = flags & FLAG_WALKABLE != 0
 	value.seethrough = flags & FLAG_SEETHROUGH != 0
 	value.mainArea = flags & FLAG_MAIN_AREA != 0
+	value.scrap = flags & FLAG_SCRAP != 0
 	value.fog = hex.Fog(clamp(int(flags >> FOG_SHIFT) & 3, 0, len(hex.Fog) - 1))
 	value.gold = int(buffer[9])
 	elevation, _ := endian.get_u16(buffer[10:12], .Little)

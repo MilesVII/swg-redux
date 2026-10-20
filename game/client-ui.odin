@@ -188,10 +188,12 @@ clientPlanFrame :: proc(inputBlocked: bool) {
 	hoverCell = nil
 	if clientState.uiState != .DISABLED && !inputBlocked do hoverCell = ui.pointedCell
 
-	if clientState.status != .PLAYING {
+	if !canPlanOrders() {
 		selectedUnitId = NO_SELECTION
 		return
 	}
+	// the unit being ordered was destroyed meanwhile
+	if getSelectedUnit() == nil && clientState.uiState != .FREE do clientState.uiState = .FREE
 
 	if clientState.uiState == .FREE && !inputBlocked && clientState.myPix < len(clientState.game.players) {
 		for unit in clientState.game.players[clientState.myPix].units {
@@ -231,6 +233,7 @@ planOrderPreview :: proc(inputBlocked: bool) {
 				hex.distance(selectedUnit.position, pointed) == 1 &&
 				onGrid &&
 				pointedCell.walkable &&
+				!pointedCell.scrap &&
 				noOrdersAt(pointed, clientState.orders) &&
 				noUnitsAt(pointed, clientState.game.players[:])
 
@@ -284,7 +287,7 @@ planOrderPreview :: proc(inputBlocked: bool) {
 			diggingAllowed :=
 				hex.distance(selectedUnit.position, pointed) == 1 &&
 				onGrid &&
-				pointedCell.gold > 0 &&
+				(pointedCell.gold > 0 || pointedCell.scrap) &&
 				noOrdersAt(pointed, clientState.orders)
 
 			if diggingAllowed {
@@ -387,6 +390,7 @@ clientDrawHUD :: proc() {
 		UI_CORNER_PAD,
 		FONT_SIZE, FONT_SPACING, statusColor
 	)
+	drawTurnTimer(rl.MeasureTextEx(vcrFont, status, FONT_SIZE, FONT_SPACING).x)
 	framerate := math.round(1.0 / rl.GetFrameTime())
 	rl.DrawTextEx(
 		vcrFont,
@@ -411,7 +415,7 @@ clientDrawHUD :: proc() {
 	drawFragList()
 	drawSettingsPanel()
 
-	if clientState.status != .PLAYING do return
+	if !canPlanOrders() do return
 
 	if getSelectedUnit() != nil {
 		#partial switch clientState.uiState {
@@ -594,7 +598,8 @@ drawTurnControl :: proc() {
 		buttonSize * 1.5
 	}
 
-	ui.button(
+	// orders can be prepared any time, but only go out on your turn
+	if clientState.status == .PLAYING && !clientState.ordersSent do ui.button(
 		orgn,
 		buttonSize,
 		ui.UI_TEXT_SUB,
@@ -623,6 +628,24 @@ drawTurnControl :: proc() {
 			.ESCAPE
 		)
 	}
+}
+
+// time left of the current turn, after the status line
+@(private="file")
+drawTurnTimer :: proc(statusWidth: f32) {
+	if clientState.turnDeadline <= 0 do return
+	if clientState.status != .PLAYING && clientState.status != .WAITING && clientState.status != .RESOLVING do return
+
+	left := max(int(clientState.turnDeadline - rl.GetTime() + .999), 0)
+	urgent := left <= 10
+	// blinks in the last seconds
+	if urgent && clientState.status == .PLAYING && utils.flicker > .5 do return
+	rl.DrawTextEx(
+		vcrFont,
+		fmt.ctprintf("%d:%02d", left / 60, left % 60),
+		UI_CORNER_PAD + { statusWidth + UI_SPACING * 2, 0 },
+		FONT_SIZE, FONT_SPACING, urgent ? rl.RED : rl.WHITE
+	)
 }
 
 noOrdersAt :: proc(at: hex.Axial, orders: OrderSet) -> bool {

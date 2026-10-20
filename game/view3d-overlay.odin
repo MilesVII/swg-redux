@@ -204,3 +204,24 @@ drawOverlays3D :: proc() {
 	rlgl.EnableDepthMask()
 	rlgl.EnableBackfaceCulling()
 }
+
+// counter-battery signs read like HUD marks: drawn last, over terrain, units and smoke
+drawCounterBatterySigns3D :: proc() {
+	if len(counterBatterySigns) == 0 do return
+	rlgl.DrawRenderBatchActive()
+	rlgl.DisableBackfaceCulling()
+	rlgl.DisableDepthTest()
+	rl.SetShaderValue(ditherShader, rl.GetShaderLocation(ditherShader, "ditherScale"), &ditherScale, .FLOAT)
+	rl.BeginShaderMode(ditherShader)
+	rlgl.Begin(rlgl.TRIANGLES)
+	for sign in counterBatterySigns {
+		q := counterBatteryQuad(sign)
+		height := terrainHeight3D(sign.at) + OVERLAY_LIFT * 2
+		rlgl.Color4ub(255, 40, 30, u8(255 * counterBatteryCoverage(sign)))
+		for i in ([]int { 0, 1, 2, 0, 2, 3 }) do rlgl.Vertex3f(q[i].x, height, q[i].y)
+	}
+	rlgl.End()
+	rl.EndShaderMode()
+	rlgl.EnableDepthTest()
+	rlgl.EnableBackfaceCulling()
+}

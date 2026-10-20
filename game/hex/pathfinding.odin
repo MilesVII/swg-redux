@@ -164,5 +164,6 @@ findWalkableOutline :: proc (grid: Grid(GridCell), from: Axial, limit: int, allo
 cellIsWalkable :: proc(position: Axial, grid: Grid(GridCell)) -> bool {
 	if !isWithinGrid(position, grid.radius) do return false
 	index := axialToIndex(position, grid.radius)
-	return grid.cells[index].value.walkable
+	value := grid.cells[index].value
+	return value.walkable && !value.scrap
 }
