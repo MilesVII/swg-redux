@@ -122,6 +122,8 @@ overlayPath3D :: proc(path: hex.Path, color: rl.Color) {
 @(private="file")
 overlayShot3D :: proc(from: hex.Axial, to: hex.Axial, color: rl.Color, indirekt: bool) {
 	START_OFFSET :: f32(.9)
+	// direct fire stops at the target's edge like in 2D, shells land in its middle
+	END_OFFSET :: f32(.5)
 
 	a := cellTop3D(from) + { 0, .3, 0 }
 	b := cellTop3D(to) + { 0, .06, 0 }
@@ -133,6 +135,7 @@ overlayShot3D :: proc(from: hex.Axial, to: hex.Axial, color: rl.Color, indirekt:
 	// adjacent targets keep at least half of their line
 	flat := rl.Vector2Length({ b.x - a.x, b.z - a.z })
 	start := flat > 1e-4 ? min(START_OFFSET / flat, .5) : 0
+	end := indirekt || flat <= 1e-4 ? f32(1) : max(1 - END_OFFSET / flat, start + .1)
 
 	point :: proc(a, b: rl.Vector3, t: f32, apex: f32, indirekt: bool) -> rl.Vector3 {
 		p := a + (b - a) * t
@@ -143,8 +146,8 @@ overlayShot3D :: proc(from: hex.Axial, to: hex.Axial, color: rl.Color, indirekt:
 	rlgl.Begin(rlgl.TRIANGLES)
 	rlgl.Color4ub(color.r, color.g, color.b, color.a)
 	for i in 0..<segments {
-		t0 := start + (1 - start) * f32(i) / f32(segments)
-		t1 := start + (1 - start) * f32(i + 1) / f32(segments)
+		t0 := start + (end - start) * f32(i) / f32(segments)
+		t1 := start + (end - start) * f32(i + 1) / f32(segments)
 		if indirekt {
 			phase := math.mod(t0 * 10 - utils.flicker, 1)
 			if phase < 0 do phase += 1
