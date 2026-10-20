@@ -31,8 +31,8 @@ colors : [HEIGHTS]rl.Color = {
 GameGrid :: hex.Grid(hex.GridCell)
 
 GameUnitType :: enum { TONK, GUN, MCV, REC }
-VISION := [GameUnitType] int { .TONK = 5, .GUN = 2, .MCV = 3, .REC = 8 }
-MOVING := [GameUnitType] int { .TONK = 4, .GUN = 0, .MCV = 3, .REC = 5 }
+VISION := [GameUnitType] int { .TONK = 5, .GUN = 2, .MCV = 4, .REC = 8 }
+MOVING := [GameUnitType] int { .TONK = 4, .GUN = 0, .MCV = 4, .REC = 5 }
 ARANGE := [GameUnitType] int { .TONK = 5, .GUN = 8, .MCV = 0, .REC = 0 }
 INDIREKT_BARRAGE_SIZE := 3
 
