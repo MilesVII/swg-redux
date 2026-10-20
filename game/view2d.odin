@@ -37,7 +37,7 @@ scene2D :: proc() {
 	defer rl.EndMode2D()
 
 	drawBackground2D()
-	if clientState.status == .CONNECTING do return
+	if !showsGame() do return
 
 	ui.drawGrid(clientState.game.grid)
 

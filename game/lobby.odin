@@ -166,6 +166,10 @@ processPackage :: proc(p: networking.Package) {
 
 	switch p.header.message {
 		case .GENERAL:
+		case .PING:
+			header := networking.MessageHeader { message = .PING }
+			networking.say(p.socket, &header)
+		case .DIAL_FAILED:
 		case .JOIN:
 		case .CONNECTED:
 			fmt.println("new client")

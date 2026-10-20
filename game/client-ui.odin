@@ -376,7 +376,7 @@ clientDrawHUD :: proc() {
 			case .PLAYING:      return "YOUR TURN", rl.RED
 			case .WAITING:      return nameStatus(), rl.WHITE
 			case .FINISH:       return finishStatus(), rl.WHITE
-			case .DISCONNECTED: return "DISCONNECTED", rl.RED
+			case .DISCONNECTED: return clientState.dialTicket != 0 ? "RECONNECTING" : "DISCONNECTED", rl.RED
 		}
 		return "", rl.WHITE
 	}
@@ -398,12 +398,22 @@ clientDrawHUD :: proc() {
 		UI_CORNER_PAD + { 0, UI_SPACING + FONT_SIZE },
 		FONT_SIZE, FONT_SPACING, rl.RED
 	)
+	hintRow := f32(2)
 	if len(clientState.notice) > 0 {
 		rl.DrawTextEx(
 			vcrFont,
 			strings.clone_to_cstring(clientState.notice, context.temp_allocator),
 			UI_CORNER_PAD + { 0, (UI_SPACING + FONT_SIZE) * 2 },
 			FONT_SIZE, FONT_SPACING, rl.YELLOW
+		)
+		hintRow += 1
+	}
+	if clientState.status == .FINISH && canLeaveToLobby() {
+		rl.DrawTextEx(
+			vcrFont,
+			"ESC TO RETURN TO LOBBY",
+			UI_CORNER_PAD + { 0, (UI_SPACING + FONT_SIZE) * hintRow },
+			FONT_SIZE, FONT_SPACING, rl.WHITE
 		)
 	}
 
@@ -415,6 +425,10 @@ clientDrawHUD :: proc() {
 	drawFragList()
 	drawSettingsPanel()
 
+	if clientState.leavePrompt {
+		drawLeavePrompt()
+		return
+	}
 	if !canPlanOrders() do return
 
 	if getSelectedUnit() != nil {

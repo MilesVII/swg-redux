@@ -10,9 +10,10 @@ import "core:thread"
 import "core:time"
 import synchan "core:sync/chan"
 
-// CONNECTED and DISCONNECTED never travel over the wire:
-// listener threads inject them so the main thread can track connections
-Message :: enum { JOIN, UPDATE, ORDERS, GENERAL, CONNECTED, DISCONNECTED }
+// PING is a heartbeat the server and lobby echo back
+// CONNECTED, DISCONNECTED and DIAL_FAILED never travel over the wire:
+// listener and dialer threads inject them so the main thread can track connections
+Message :: enum { JOIN, UPDATE, ORDERS, GENERAL, PING, CONNECTED, DISCONNECTED, DIAL_FAILED }
 MessageHeader :: struct {
 	message: Message,
 	me: [16]rune,
@@ -23,7 +24,9 @@ Package :: struct {
 	payload: []u8,
 	socket: net.TCP_Socket,
 	// unique per connection, unlike socket handles which get reused by the OS
-	connection: int
+	connection: int,
+	// the dialAsync attempt that opened this connection, 0 for accepted ones
+	ticket: int
 }
 
 // guards against hostile or corrupted headers asking for huge allocations
@@ -38,6 +41,8 @@ verbose := true
 
 @(private="file")
 connectionCounter: int
+@(private="file")
+ticketCounter: int
 
 init :: proc() {
 	channel, err := synchan.create_buffered(
@@ -117,17 +122,19 @@ startAccepting :: proc(socket: net.TCP_Socket) {
 // reads packages from the socket on a separate thread and forwards them to `rx`
 // sends CONNECTED first and DISCONNECTED once the socket is closed or broken
 // returns the connection id that marks every package from this socket
-listen :: proc(socket: net.TCP_Socket) -> int {
+listen :: proc(socket: net.TCP_Socket, ticket := 0) -> int {
 	Listener :: struct {
 		socket: net.TCP_Socket,
-		connection: int
+		connection: int,
+		ticket: int
 	}
 	listener :: proc(l: Listener) {
 		local :: proc(message: Message, l: Listener) {
 			synchan.send(tx, Package {
 				header = { message = message },
 				socket = l.socket,
-				connection = l.connection
+				connection = l.connection,
+				ticket = l.ticket
 			})
 		}
 
@@ -138,11 +145,31 @@ listen :: proc(socket: net.TCP_Socket) -> int {
 
 	connection := sync.atomic_add(&connectionCounter, 1) + 1
 	thread.create_and_start_with_poly_data(
-		Listener { socket, connection },
+		Listener { socket, connection, ticket },
 		listener,
 		self_cleanup = true
 	)
 	return connection
+}
+
+// dials on a separate thread, so a dead network can't freeze the caller;
+// the result is a CONNECTED package (then packages as with `listen`) or a DIAL_FAILED one,
+// both carrying the returned ticket
+dialAsync :: proc(to: net.Address, port: int) -> (ticket: int) {
+	Dial :: struct {
+		to: net.Address,
+		port: int,
+		ticket: int
+	}
+	dialer :: proc(d: Dial) {
+		socket, ok := dial(d.to, d.port)
+		if ok do listen(socket, d.ticket)
+		else do synchan.send(tx, Package { header = { message = .DIAL_FAILED }, ticket = d.ticket })
+	}
+
+	ticket = sync.atomic_add(&ticketCounter, 1) + 1
+	thread.create_and_start_with_poly_data(Dial { to, port, ticket }, dialer, self_cleanup = true)
+	return ticket
 }
 
 // returns once the socket is closed or broken
@@ -158,7 +185,7 @@ listenBlocking :: proc(channel: synchan.Chan(Package, .Send), socket: net.TCP_So
 			}
 		}
 
-		synchan.send(channel, Package { header, payload, socket, connection })
+		synchan.send(channel, Package { header = header, payload = payload, socket = socket, connection = connection })
 	}
 }
 

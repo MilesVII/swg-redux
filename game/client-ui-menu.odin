@@ -66,12 +66,7 @@ drawMain :: proc() {
 			case:
 				sessionIndex := menuState.index - 2
 				if sessionIndex < 0 || sessionIndex >= len(menuState.sessions) do break
-				port := menuState.sessions[sessionIndex].port
-				clientState.status = .CONNECTING
-				// the lobby socket's DISCONNECTED must not count as losing the game server
-				clientState.connection = 0
-				networking.hang(clientState.serverSocket)
-				connect(menuState.lobbyAddress, port)
+				joinLobbyGame(menuState.sessions[sessionIndex].port)
 		}
 	}
 

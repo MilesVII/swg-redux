@@ -57,6 +57,7 @@ Games can have a turn timer, set when requesting a game in a lobby or with `turn
 - `F2` switches between 2D and 3D renderers, the default is set with `renderer` in config.toml
 - `F12` saves a screenshot
 - Window is resizable
+- A lost connection is retried every three seconds, rejoining the game where it was
 
 ### In menu
 - Arrows / `WASD` and `Enter` to navigate menu, adjust parameters and select items
@@ -65,6 +66,7 @@ Games can have a turn timer, set when requesting a game in a lobby or with `turn
 - `Z/X/C/V` to pick order types
 - `Enter` to submit orders
 - `Esc` or right click to abort current order placement
+- `Esc` with nothing selected leaves the game for the lobby, when the client was started with one
 - `F1` to open settings menu
 
 #### 2D camera

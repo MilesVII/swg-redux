@@ -139,7 +139,18 @@ ClientState :: struct {
 	// GetTime() when the current turn runs out, 0 without a turn timer
 	turnDeadline: f64,
 	// orders went out this turn, SUBMIT is gone until the next update
-	ordersSent: bool
+	ordersSent: bool,
+	target: ConnectionTarget,
+	targetAddress: net.Address,
+	targetPort: int,
+	// the dialAsync attempt in progress, 0 when not dialing
+	dialTicket: int,
+	// GetTime() of the next reconnection attempt, 0 when none is due
+	retryAt: f64,
+	lastHeard: f64,
+	lastPing: f64,
+	// asking whether to leave the game for the lobby
+	leavePrompt: bool
 }
 
 // a red sector flashing once outside the side of a hit tile that faces the gun that fired
@@ -197,6 +208,15 @@ pruneCounterBatterySigns :: proc() {
 AUTO_SUBMIT_LEAD :: 1.0
 
 // orders can be prepared on your turn and while others play theirs
+// whether there's a game map to draw, the menus and connecting screens only show the backdrop
+@(private)
+showsGame :: proc() -> bool {
+	#partial switch clientState.status {
+		case .NAMING, .CONNECTING_L, .LOBBY, .CONNECTING: return false
+	}
+	return clientState.target == .SERVER
+}
+
 @(private)
 canPlanOrders :: proc() -> bool {
 	return clientState.status == .PLAYING || clientState.status == .WAITING
@@ -318,7 +338,8 @@ client :: proc(
 		ui.updateWindow()
 		handleClientHotkeys()
 
-		inputBlocked := settingsPanelHovered()
+		maintainConnection()
+		inputBlocked := settingsPanelHovered() || clientState.leavePrompt
 		utils.cursorHoverBegin()
 		activeView.update(!clientState.cameraControlsEnabled, inputBlocked)
 		updateExplosions()
@@ -358,16 +379,24 @@ startClientSession :: proc() {
 		menuState.ngr.name = clientState.name
 		menuState.lobbyAddress = session.lobbyAddress
 
-		clientState.status = .CONNECTING_L
-		connectToLobby(session.lobbyAddress, session.lobbyPort)
+		connectTo(.LOBBY, session.lobbyAddress, session.lobbyPort, true)
 	} else {
-		clientState.status = .CONNECTING
-		connect(session.server, session.port)
+		connectTo(.SERVER, session.server, session.port, true)
 	}
 }
 
 @(private="file")
 handleClientHotkeys :: proc() {
+	// esc leaves a game for the lobby: right away once it's over, after asking while it runs;
+	// with a unit selected it belongs to the ABORT button
+	if clientState.leavePrompt {
+		if rl.IsKeyPressed(.ENTER) || rl.IsKeyPressed(.KP_ENTER) do leaveToLobby()
+		else if rl.IsKeyPressed(.ESCAPE) do clientState.leavePrompt = false
+	} else if rl.IsKeyPressed(.ESCAPE) && canLeaveToLobby() && getSelectedUnit() == nil {
+		if clientState.status == .FINISH do leaveToLobby()
+		else do clientState.leavePrompt = true
+	}
+
 	// letters belong to the name being typed
 	if clientState.status != .NAMING && rl.IsKeyPressed(.P) {
 		if rl.IsKeyDown(.LEFT_CONTROL) || rl.IsKeyDown(.RIGHT_CONTROL) {
@@ -491,35 +520,133 @@ updateExplosions :: proc() {
 	}
 }
 
-@(private)
-connect :: proc(to: net.Address, port: int) -> bool {
-	socket, ok := networking.dial(to, port)
-	if !ok {
-		clientState.status = .DISCONNECTED
-		setNotice("CAN'T REACH GAME SERVER")
-		return false
-	}
-	clientState.serverSocket = socket
-	clientState.connection = networking.listen(socket)
+// what the client talks to, kept to reconnect after the connection drops
+ConnectionTarget :: enum { NONE, LOBBY, SERVER }
 
-	header := networking.MessageHeader {
-		message = .JOIN,
-		me = utils.stringToBadge(clientState.name)
-	}
-	networking.say(clientState.serverSocket, &header)
-	return true
+// seconds between reconnection attempts
+RECONNECT_S :: 3.0
+// seconds between heartbeats, and of silence after which the connection counts as lost
+PING_INTERVAL_S :: 5.0
+SILENCE_TIMEOUT_S :: 15.0
+
+// starts dialing in the background, see onConnected and onDialFailed;
+// `initial` shows the connecting status, reconnects keep the last map on screen
+@(private)
+connectTo :: proc(target: ConnectionTarget, address: net.Address, port: int, initial: bool) {
+	clientState.target = target
+	clientState.targetAddress = address
+	clientState.targetPort = port
+	clientState.retryAt = 0
+	if initial do clientState.status = target == .LOBBY ? .CONNECTING_L : .CONNECTING
+	clientState.dialTicket = networking.dialAsync(address, port)
 }
 
 @(private="file")
-connectToLobby :: proc(to: net.Address, port: int) {
-	socket, ok := networking.dial(to, port)
-	if !ok {
-		clientState.status = .DISCONNECTED
-		setNotice("CAN'T REACH LOBBY")
-		return
+onConnected :: proc(p: networking.Package) {
+	clientState.dialTicket = 0
+	clientState.serverSocket = p.socket
+	clientState.connection = p.connection
+	clientState.lastHeard = rl.GetTime()
+	clientState.lastPing = rl.GetTime()
+	setNotice("")
+
+	// game servers know players by name, rejoining continues the game
+	if clientState.target == .SERVER {
+		header := networking.MessageHeader { message = .JOIN, me = utils.stringToBadge(clientState.name) }
+		networking.say(clientState.serverSocket, &header)
 	}
-	clientState.serverSocket = socket
-	clientState.connection = networking.listen(socket)
+}
+
+@(private="file")
+scheduleReconnect :: proc(notice: string) {
+	clientState.status = .DISCONNECTED
+	clientState.retryAt = rl.GetTime() + RECONNECT_S
+	setNotice(notice)
+}
+
+// retries and heartbeats, called every frame
+@(private="file")
+maintainConnection :: proc() {
+	now := rl.GetTime()
+
+	if clientState.status == .DISCONNECTED && clientState.dialTicket == 0 && clientState.retryAt > 0 && now >= clientState.retryAt {
+		connectTo(clientState.target, clientState.targetAddress, clientState.targetPort, false)
+	}
+
+	if clientState.connection == 0 do return
+	if now - clientState.lastPing >= PING_INTERVAL_S {
+		clientState.lastPing = now
+		header := networking.MessageHeader { message = .PING }
+		networking.say(clientState.serverSocket, &header)
+	}
+	// a dead link doesn't always close the socket, silence does the job
+	if now - clientState.lastHeard > SILENCE_TIMEOUT_S {
+		clientState.lastHeard = now
+		networking.kick(clientState.serverSocket)
+	}
+}
+
+// ends the current game and goes back to the lobby's menu
+@(private)
+leaveToLobby :: proc() {
+	if !session.lobbyEnabled do return
+	resetGameState()
+	clearSessions()
+	menuState.status = .MAIN
+	menuState.index = 0
+	menuState.ngrSent = false
+
+	// the listener reports DISCONNECTED, which closes the socket
+	if clientState.connection != 0 do networking.kick(clientState.serverSocket)
+	clientState.connection = 0
+	connectTo(.LOBBY, session.lobbyAddress, session.lobbyPort, true)
+}
+
+// from the lobby menu into one of its games
+@(private)
+joinLobbyGame :: proc(port: int) {
+	if clientState.connection != 0 do networking.kick(clientState.serverSocket)
+	clientState.connection = 0
+	connectTo(.SERVER, session.lobbyAddress, port, true)
+}
+
+@(private)
+canLeaveToLobby :: proc() -> bool {
+	return session.lobbyEnabled && clientState.target == .SERVER
+}
+
+// forgets everything about the current game
+@(private="file")
+resetGameState :: proc() {
+	if clientUpdateAnimationsPending {
+		deleteState(clientPendingState)
+		clientPendingState = {}
+		clientUpdateAnimationsPending = false
+	}
+	deleteUpdate(&clientUpdateBuffer)
+	deleteState(clientState.game)
+	clientState.game = {}
+	clientStateVersion += 1
+
+	clear(&clientState.orders)
+	clear(&clientState.storedGunOrders)
+	clear(&clientSentOrders)
+	clear(&clientState.explosions)
+	clear(&counterBatterySigns)
+	clientFirstUpdate = true
+	selectedUnitId = NO_SELECTION
+	clientState.uiState = .DISABLED
+	clientState.cameraControlsEnabled = false
+
+	delete(clientState.activePlayerName)
+	clientState.activePlayerName = ""
+	delete(clientState.winnerName)
+	clientState.winnerName = ""
+	clientState.turnDeadline = 0
+	clientState.ordersSent = false
+	clientState.fragCounter = 0
+	clientState.fragCounterTTS = 0
+	clientState.leavePrompt = false
 }
 
 // takes ownership of a heap string, copies literals
@@ -532,14 +659,36 @@ setNotice :: proc(notice: string, owned := false) {
 @(private="file")
 processPackage :: proc(p: networking.Package) {
 	defer delete(p.payload)
+
+	// results of dialing: only the latest attempt counts, late ones are dropped
+	if p.header.message == .CONNECTED || p.header.message == .DIAL_FAILED {
+		current := p.ticket != 0 && p.ticket == clientState.dialTicket
+		if p.header.message == .CONNECTED {
+			if current do onConnected(p)
+			else do networking.kick(p.socket)
+		} else if current {
+			clientState.dialTicket = 0
+			scheduleReconnect(clientState.target == .LOBBY ? "CAN'T REACH LOBBY, RETRYING" : "CAN'T REACH GAME SERVER, RETRYING")
+		}
+		return
+	}
+	// sockets are closed here only, whichever connection they belonged to
+	if p.header.message == .DISCONNECTED do networking.hang(p.socket)
+
 	if p.connection != clientState.connection do return
+	clientState.lastHeard = rl.GetTime()
 
 	switch p.header.message {
-		case .CONNECTED:
+		case .CONNECTED, .DIAL_FAILED:
+		case .PING:
 		case .DISCONNECTED:
-			networking.hang(p.socket)
-			clientState.status = .DISCONNECTED
-			setNotice("CONNECTION LOST")
+			clientState.connection = 0
+			// a finished game has nothing to come back to
+			if clientState.status == .FINISH {
+				setNotice("CONNECTION CLOSED")
+				break
+			}
+			scheduleReconnect("CONNECTION LOST, RETRYING")
 		case .GENERAL:
 			// notice from lobby or server
 			notice: string
@@ -548,7 +697,7 @@ processPackage :: proc(p: networking.Package) {
 			if clientState.status == .LOBBY do menuState.ngrSent = false
 		case .JOIN:
 			// lobby offers session list
-			if clientState.status != .CONNECTING_L && clientState.status != .LOBBY do break
+			if clientState.target != .LOBBY do break
 			clientState.status = .LOBBY
 			clearSessions()
 			if !decode(p.payload, &menuState.sessions) do clearSessions()

@@ -39,7 +39,7 @@ toScreen3D :: proc(at: hex.Axial) -> rl.Vector2 {
 
 @(private="file")
 hud3D :: proc() {
-	if clientState.status != .CONNECTING do drawUnitBars3D()
+	if showsGame() do drawUnitBars3D()
 }
 
 // "true isometric" elevation: atan(1 / sqrt(2))
@@ -284,7 +284,7 @@ scene3D :: proc() {
 	rlgl.SetMatrixProjection(rl.MatrixPerspective(orbit.fov * rl.DEG2RAD, aspect, near, far))
 
 	drawGround3D()
-	if clientState.status != .CONNECTING {
+	if showsGame() {
 		drawTerrain3D()
 		drawUnits3D()
 		drawOverlays3D()

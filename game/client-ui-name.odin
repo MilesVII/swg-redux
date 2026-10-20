@@ -33,6 +33,27 @@ acceptedCharacter :: proc(r: rune) -> (u8, bool) {
 	return 0, false
 }
 
+// asks before leaving a running game for the lobby, keys are handled in handleClientHotkeys
+@(private)
+drawLeavePrompt :: proc() {
+	windowSize := ui.windowSizeF()
+	height := PROMPT_ROW * 2 + UI_SPACING * 3
+	box := rl.Rectangle {
+		f32(int((windowSize.x - PROMPT_WIDTH) * .5)),
+		f32(int((windowSize.y - height) * .5)),
+		PROMPT_WIDTH,
+		height
+	}
+	rl.DrawRectangleRec(box, { 0, 0, 0, 200 })
+	rl.DrawRectangleLinesEx(box, 1, rl.WHITE)
+
+	x := box.x + UI_SPACING * 2
+	y := box.y + UI_SPACING
+	rl.DrawTextEx(vcrFont, "LEAVE THE GAME?", { x, y + (PROMPT_ROW - FONT_SIZE) * .5 }, FONT_SIZE, FONT_SPACING, rl.YELLOW)
+	y += PROMPT_ROW + UI_SPACING
+	rl.DrawTextEx(vcrFont, "ENTER TO LEAVE, ESC TO STAY", { x, y + (PROMPT_ROW - FONT_SIZE) * .5 }, FONT_SIZE, FONT_SPACING, HINT_COLOR)
+}
+
 // input and drawing, called with the HUD while the client waits for a name
 @(private)
 drawNamePrompt :: proc() {
