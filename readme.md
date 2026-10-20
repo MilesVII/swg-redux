@@ -65,6 +65,7 @@ Games can have a turn timer, set when requesting a game in a lobby or with `turn
 ### In game
 - `Z/X/C/V` to pick order types
 - `Enter` to submit orders
+- Hovering a unit shows its vision range in blue and attack range in red, so does placing an attack or picking a build site; a move preview shows the vision from the destination
 - `Esc` or right click to abort current order placement
 - `Esc` with nothing selected leaves the game for the lobby, when the client was started with one
 - `F1` to open settings menu
@@ -79,6 +80,7 @@ Games can have a turn timer, set when requesting a game in a lobby or with `turn
 - `R/F` to tilt, right click and drag works too
 - Mousewheel or `-/=` to zoom
 - `Home` resets the view
+- The dark tile beyond the map's north-eastern corner is a compass, its red sectors point north, which is up in the 2D view
 - Field of view, tilt and dithering size can be adjusted in settings
 
 ### Unit models

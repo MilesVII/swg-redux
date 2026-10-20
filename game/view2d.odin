@@ -135,6 +135,12 @@ drawOverlays2D :: proc() {
 				ui.drawHexLine(c.from, c.to, .12, c.color, c.indirekt ? 1.5 : 0.5)
 			case OverlayGhost:
 				// the build target border is enough in 2D
+			case OverlayRing:
+				for edge in hex.rangeBoundary(c.center, c.radius, context.temp_allocator) {
+					for dash in RING_DASHES {
+						ui.drawLine(edge.a + (edge.b - edge.a) * dash[0], edge.a + (edge.b - edge.a) * dash[1], .07, c.color)
+					}
+				}
 		}
 	}
 }

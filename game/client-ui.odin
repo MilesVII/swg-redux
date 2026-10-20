@@ -159,12 +159,41 @@ OverlayGhost :: struct {
 	type: GameUnitType,
 	color: rl.Color
 }
+// dashed border of the cells within `radius` of a unit: its vision or its attack reach
+OverlayRing :: struct {
+	center: hex.Axial,
+	radius: int,
+	color: rl.Color
+}
 OverlayCommand :: union {
 	OverlayCell,
 	OverlayArea,
 	OverlayPath,
 	OverlayShot,
-	OverlayGhost
+	OverlayGhost,
+	OverlayRing
+}
+
+VISION_RING_COLOR :: rl.Color { 90, 170, 255, 255 }
+ATTACK_RING_COLOR :: rl.Color { 255, 70, 50, 255 }
+// where along each border edge its two dashes run, leaving gaps at the corners and in the middle
+RING_DASHES :: [2][2]f32 { { .06, .44 }, { .56, .94 } }
+
+// vision and attack rings of a unit of `type` standing at `at`
+@(private="file")
+planUnitRanges :: proc(at: hex.Axial, type: GameUnitType, vision := true, attack := true) {
+	if vision && VISION[type] > 0 do overlay(OverlayRing { at, VISION[type], VISION_RING_COLOR })
+	if attack && ARANGE[type] > 0 do overlay(OverlayRing { at, ARANGE[type], ATTACK_RING_COLOR })
+}
+
+// ranges of whatever unit is under the cursor, enemies and remembered guns included
+@(private="file")
+planHoveredUnitRanges :: proc() {
+	for player in clientState.game.players {
+		for unit in player.units {
+			if unit.position == ui.pointedCell do planUnitRanges(unit.position, unit.type)
+		}
+	}
 }
 
 @(private)
@@ -187,6 +216,9 @@ clientPlanFrame :: proc(inputBlocked: bool) {
 	overlays = make([dynamic]OverlayCommand, context.temp_allocator)
 	hoverCell = nil
 	if clientState.uiState != .DISABLED && !inputBlocked do hoverCell = ui.pointedCell
+
+	// hovering shows ranges whenever there's a map, placing an order shows the one range that matters
+	if showsGame() && !inputBlocked && (clientState.uiState == .DISABLED || clientState.uiState == .FREE) do planHoveredUnitRanges()
 
 	if !canPlanOrders() {
 		selectedUnitId = NO_SELECTION
@@ -241,6 +273,7 @@ planOrderPreview :: proc(inputBlocked: bool) {
 				utils.setCursorHover(true)
 				overlay(OverlayCell { pointed, .2, rl.YELLOW })
 				overlay(OverlayGhost { pointed, selectedBuildingUnit, myColor() })
+				planUnitRanges(pointed, selectedBuildingUnit)
 
 				if clicked {
 					postponeClick(OrderAction {
@@ -271,6 +304,8 @@ planOrderPreview :: proc(inputBlocked: bool) {
 				utils.setCursorHover(true)
 				path, _ := hex.findPath(clientState.game.grid, selectedUnit.position, pointed, context.temp_allocator)
 				overlay(OverlayPath { path, rl.BLUE })
+				// what the unit would see from there
+				planUnitRanges(pointed, selectedUnit.type, attack = false)
 				overlay(OverlayCell { pointed, .2, rl.BLUE })
 
 				if clicked {
@@ -305,6 +340,7 @@ planOrderPreview :: proc(inputBlocked: bool) {
 				}
 			}
 		case .ORDER_ATK:
+			planUnitRanges(selectedUnit.position, selectedUnit.type, vision = false)
 			attackAllowed :=
 				hex.distance(selectedUnit.position, pointed) <= ARANGE[selectedUnit.type]
 

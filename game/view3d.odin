@@ -286,6 +286,7 @@ scene3D :: proc() {
 	drawGround3D()
 	if showsGame() {
 		drawTerrain3D()
+		drawCompass3D()
 		drawUnits3D()
 		drawOverlays3D()
 		drawFX3D()

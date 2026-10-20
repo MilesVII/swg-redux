@@ -117,6 +117,25 @@ overlayPath3D :: proc(path: hex.Path, color: rl.Color) {
 	rlgl.End()
 }
 
+// dashed range border following the tiles, each dash on the higher of the two tiles it runs between
+@(private="file")
+overlayRing3D :: proc(ring: OverlayRing, color: rl.Color) {
+	WIDTH :: f32(.05)
+	rlgl.Begin(rlgl.TRIANGLES)
+	rlgl.Color4ub(color.r, color.g, color.b, color.a)
+	for edge in hex.rangeBoundary(ring.center, ring.radius, context.temp_allocator) {
+		height := max(terrainHeight3D(edge.inside), terrainHeight3D(edge.outside)) + OVERLAY_LIFT * 2
+		along := edge.b - edge.a
+		side := rl.Vector2Normalize({ -along.y, along.x }) * WIDTH * .5
+		for dash in RING_DASHES {
+			p0 := edge.a + along * dash[0]
+			p1 := edge.a + along * dash[1]
+			quad(lift(p0 - side, height), lift(p1 - side, height), lift(p1 + side, height), lift(p0 + side, height))
+		}
+	}
+	rlgl.End()
+}
+
 // straight line for direct fire, a dashed ballistic arc for indirect,
 // both starting about a tile away so they don't cut through the shooter
 @(private="file")
@@ -185,6 +204,8 @@ overlayPass :: proc(alpha: f32) {
 				overlayShot3D(c.from, c.to, withAlpha(c.color, alpha), c.indirekt)
 			case OverlayGhost:
 				// drawn with the units
+			case OverlayRing:
+				overlayRing3D(c, withAlpha(c.color, alpha))
 		}
 	}
 
@@ -226,5 +247,39 @@ drawCounterBatterySigns3D :: proc() {
 	rlgl.End()
 	rl.EndShaderMode()
 	rlgl.EnableDepthTest()
+	rlgl.EnableBackfaceCulling()
+}
+
+// a tile one beyond the map's north-eastern corner, the two top sectors flanking
+// the north vertex in red: north is -Z, up the screen in 2D and away from the default orbit
+drawCompass3D :: proc() {
+	radius := clientState.game.grid.radius
+	if radius == 0 do return
+	at := hex.Axial { radius + 2, -(radius + 2) }
+	center := hex.axialToWorld(at)
+	corners := hex.vertesex(at)
+	top := TERRAIN_MIN_HEIGHT
+	TOP_COLOR :: rl.Color { 44, 44, 48, 255 }
+	WALL_COLOR :: rl.Color { 26, 26, 30, 255 }
+	NEEDLE_COLOR :: rl.Color { 230, 40, 30, 255 }
+	// corner 2 points north, see hex.vertesexRaw
+	NORTH_CORNER :: 2
+
+	rlgl.DrawRenderBatchActive()
+	rlgl.DisableBackfaceCulling()
+	rlgl.Begin(rlgl.TRIANGLES)
+	for k in 0..<6 {
+		a := corners[k]
+		b := corners[(k + 1) % 6]
+		needle := k == NORTH_CORNER - 1 || k == NORTH_CORNER
+		color := needle ? NEEDLE_COLOR : TOP_COLOR
+		rlgl.Color4ub(color.r, color.g, color.b, color.a)
+		for p in ([3]rl.Vector2 { center, a, b }) do rlgl.Vertex3f(p.x, top, p.y)
+
+		rlgl.Color4ub(WALL_COLOR.r, WALL_COLOR.g, WALL_COLOR.b, WALL_COLOR.a)
+		quad(lift(a, top), lift(b, top), lift(b, 0), lift(a, 0))
+	}
+	rlgl.End()
+	rlgl.DrawRenderBatchActive()
 	rlgl.EnableBackfaceCulling()
 }
