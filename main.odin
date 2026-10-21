@@ -19,7 +19,12 @@ main :: proc () {
 		}
 	}
 
+	// a client built without a console still prints to the terminal it was started from
+	attachParentConsole()
+
 	config := config()
+	if config.common.mode != .client && !config.server.managed do ensureConsole()
+
 	switch config.common.mode {
 		case .client: 
 			server: net.Address

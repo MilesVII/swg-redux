@@ -12,6 +12,8 @@ cp config.toml.example config.toml
 
 On Linux, odin links with `clang`, and the client needs X11 development files: `sudo apt install clang libx11-dev`
 
+On Windows, `odin build . -subsystem:windows` builds without a console window. Servers and lobbies from such a build print to the terminal they were started from, or open a console when started by double click.
+
 Servers and lobbies can be built without the client, which leaves out raylib, X11 and OpenGL:
 ```
 odin build . -define:HEADLESS=true
