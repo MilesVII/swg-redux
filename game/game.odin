@@ -17,7 +17,6 @@ MOUNTAIN_COLOR := rl.Color{154, 66, 66, 255}
 colors : [HEIGHTS]rl.Color = {
 	rl.BLUE,
 	rl.BLUE,
-	rl.BLUE,
 	rl.GREEN,
 	rl.GREEN,
 	rl.GREEN,
@@ -25,8 +24,11 @@ colors : [HEIGHTS]rl.Color = {
 	rl.GREEN,
 	rl.YELLOW,
 	MOUNTAIN_COLOR,
+	MOUNTAIN_COLOR,
 	MOUNTAIN_COLOR
 }
+WALKABLE_LO :: 2
+WALKABLE_HI :: 6
 
 GameGrid :: hex.Grid(hex.GridCell)
 
@@ -184,8 +186,8 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0), teamSize :=
 
 		cell.value = {
 			color = goldCell ? MOUNTAIN_COLOR : color,
-			walkable = hi < 8 && hi > 2,
-			seethrough = hi < 8,
+			walkable = hi <= WALKABLE_HI && hi >= WALKABLE_LO,
+			seethrough = hi <= WALKABLE_HI,
 			fog = .FOG,
 			gold = goldCell ? 1 : 0,
 			elevation = elevation
