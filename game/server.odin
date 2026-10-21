@@ -1,6 +1,7 @@
 package game
 
 import "core:fmt"
+import "core:strings"
 import "core:time"
 import "core:net"
 import synchan "core:sync/chan"
@@ -22,7 +23,9 @@ Player :: struct {
 	online: bool,
 	socket: net.TCP_Socket,
 	// cell values the player has, updates only carry what changed since; nil sends the whole map
-	sentCells: []hex.GridCell
+	sentCells: []hex.GridCell,
+	// confirmed their team, see onTeamChoice
+	ready: bool
 }
 
 @(private="file")
@@ -54,7 +57,7 @@ ABANDONED_TIMEOUT :: time.Hour
 // a late client still gets its orders in, it submits a moment before its own deadline
 TURN_GRACE :: 3 * time.Second
 
-server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, turnSeconds: int, local: bool, port: int, lobbyPort: int) {
+server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, turnSeconds: int, teamSize: int, local: bool, port: int, lobbyPort: int) {
 	session = Session {
 		activePlayerIx = -1,
 		players = make([]Player, playerCount),
@@ -78,7 +81,7 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, tu
 	gameInitRetries := 7
 	for gameInitRetries >= 0 {
 		err: GameInitError
-		session.game, err = createGame(playerCount, mapRadius, mapSeed)
+		session.game, err = createGame(playerCount, mapRadius, mapSeed, teamSize)
 		if err == .OK do break
 		else if gameInitRetries == 0 || mapSeed != -1 {
 			utils.log("failed to create a game, aborting")
@@ -138,6 +141,16 @@ processPackage :: proc(p: networking.Package) {
 		case .PING:
 			header := networking.MessageHeader { message = .PING }
 			networking.say(p.socket, &header)
+		case .TEAM:
+			if gameStarted() || session.game.teamSize <= 1 do break
+			choice: TeamChoice
+			if !decode(p.payload, &choice) do break
+			for player, pix in session.players {
+				if player.online && player.socket == p.socket {
+					onTeamChoice(pix, choice)
+					break
+				}
+			}
 		case .DIAL_FAILED:
 		case .CONNECTED:
 			if !session.managed do fmt.printfln("new client, waiting for JOIN")
@@ -243,6 +256,39 @@ gameFull :: proc() -> bool {
 	for player in session.players do if !player.online do return false
 	return true
 }
+
+@(private="file")
+allReady :: proc() -> bool {
+	for player in session.players do if !player.ready do return false
+	return true
+}
+
+// moves the player to a free slot of the wanted team, and records whether they're ready;
+// slots decide the team, so the player records are swapped
+@(private="file")
+onTeamChoice :: proc(pix: int, choice: TeamChoice) {
+	teamSize := session.game.teamSize
+	teams := len(session.players) / teamSize
+	if choice.team < 0 || choice.team >= teams do return
+
+	current := pix
+	if choice.team != teamOf(&session.game, pix) {
+		for slot in choice.team * teamSize..<(choice.team + 1) * teamSize {
+			if _, taken := session.players[slot].id.?; taken do continue
+			session.players[slot], session.players[pix] = session.players[pix], session.players[slot]
+			// both views changed
+			forgetSentCells(&session.players[slot])
+			forgetSentCells(&session.players[pix])
+			current = slot
+			break
+		}
+	}
+	// readiness only counts for the team the player ends up on
+	session.players[current].ready = choice.ready && teamOf(&session.game, current) == choice.team
+
+	broadcastUpdates()
+	startGameIfFull()
+}
 @(private="file")
 gameStarted :: proc() -> bool {
 	return session.activePlayerIx >= 0
@@ -251,6 +297,8 @@ gameStarted :: proc() -> bool {
 startGameIfFull :: proc() {
 	// reconnects into a running game must not reset the turn
 	if gameStarted() || !gameFull() do return
+	// team games wait for everyone to settle on a team
+	if session.game.teamSize > 1 && !allReady() do return
 
 	if session.managed do signalLobby(LOBBY_SIGNAL_FULL)
 	session.activePlayerIx = 0
@@ -273,14 +321,22 @@ getActivePlayerName :: proc() -> string {
 }
 
 @(private="file")
+getWinnerTeam :: proc() -> int {
+	standing := teamsStanding(&session.game, context.temp_allocator)
+	return len(standing) > 0 ? standing[0] : -1
+}
+
+// the winning team's names, joined
 getWinnerName :: proc() -> string {
+	winner := getWinnerTeam()
+	if winner < 0 do return ""
+	names := make([dynamic]string, context.temp_allocator)
 	for player, pix in session.players {
-		if activeUnitsLeft(&session.game, pix) {
-			name, named := player.id.?
-			return named ? name : NAME_PLACEHOLDER
-		}
+		if teamOf(&session.game, pix) != winner do continue
+		name, named := player.id.?
+		append(&names, named ? name : NAME_PLACEHOLDER)
 	}
-	return ""
+	return strings.join(names[:], " & ", context.temp_allocator)
 }
 
 @(private="file")
@@ -333,6 +389,13 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 		players[i] = PlayerState { color = p.color, units = p.units, unitIdCounter = p.unitIdCounter }
 	}
 
+	names := make([]string, len(session.players), context.temp_allocator)
+	ready := make([]bool, len(session.players), context.temp_allocator)
+	for p, i in session.players {
+		names[i] = p.id.? or_else ""
+		ready[i] = p.ready
+	}
+
 	update := Update {
 		radius = reducedState.grid.radius,
 		fullGrid = fullGrid,
@@ -350,15 +413,26 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 		explosions = explosions[:],
 		gameStarted = gameStarted(),
 		gameOver = session.over,
-		winnerBadge = session.over ? getWinnerName() : ""
+		teamSize = session.game.teamSize,
+		winnerBadge = session.over ? getWinnerName() : "",
+		winnerTeam = session.over ? getWinnerTeam() : -1,
+		playerNames = names,
+		playersReady = ready
 	}
 
 	networking.say(socket, &header, encode(update))
 }
 
+// teams alternate: with two teams of two the order is 0, 2, 1, 3
 nextPlayer :: proc() {
-	session.activePlayerIx += 1
-	if session.activePlayerIx >= len(session.players) {
-		session.activePlayerIx = 0
+	teamSize := max(session.game.teamSize, 1)
+	teams := len(session.players) / teamSize
+	team := session.activePlayerIx / teamSize
+	member := session.activePlayerIx % teamSize
+	team += 1
+	if team >= teams {
+		team = 0
+		member = (member + 1) % teamSize
 	}
+	session.activePlayerIx = team * teamSize + member
 }

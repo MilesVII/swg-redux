@@ -13,7 +13,8 @@ import synchan "core:sync/chan"
 // PING is a heartbeat the server and lobby echo back
 // CONNECTED, DISCONNECTED and DIAL_FAILED never travel over the wire:
 // listener and dialer threads inject them so the main thread can track connections
-Message :: enum { JOIN, UPDATE, ORDERS, GENERAL, PING, CONNECTED, DISCONNECTED, DIAL_FAILED }
+// TEAM picks a team or marks the player ready before a team game starts
+Message :: enum { JOIN, UPDATE, ORDERS, GENERAL, PING, TEAM, CONNECTED, DISCONNECTED, DIAL_FAILED }
 MessageHeader :: struct {
 	message: Message,
 	me: [16]rune,

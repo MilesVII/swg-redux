@@ -141,13 +141,19 @@ bonkUnits :: proc(state: ^GameState, explosions: []ExplosionBufferEntry) {
 	}
 }
 
+// the last team standing wins, a team stands while any member has an MCV
 gameOver :: proc(state: ^GameState) -> bool {
-	ablePlayers := 0
-	for _, pix in state.players {
-		if activeUnitsLeft(state, pix) do ablePlayers += 1
-	}
+	return len(teamsStanding(state, context.temp_allocator)) <= 1
+}
 
-	return ablePlayers <= 1
+teamsStanding :: proc(state: ^GameState, allocator := context.allocator) -> []int {
+	standing := make([dynamic]int, allocator)
+	for _, pix in state.players {
+		if !activeUnitsLeft(state, pix) do continue
+		team := teamOf(state, pix)
+		if !slice.contains(standing[:], team) do append(&standing, team)
+	}
+	return standing[:]
 }
 
 activeUnitsLeft :: proc(state: ^GameState, playerIx: int) -> bool {

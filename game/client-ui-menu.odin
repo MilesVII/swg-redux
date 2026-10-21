@@ -75,9 +75,10 @@ drawMain :: proc() {
 	for session, i in menuState.sessions {
 		drawItemButton(
 			fmt.tprintf(
-				"R%d P%d%s %s%s%s",
+				"R%d P%d%s%s %s%s%s",
 				session.config.mapRadius,
 				session.config.playerCount,
+				teamSetupLabel(session.config.playerCount, session.config.teamSize),
 				session.config.turnSeconds > 0 ? fmt.tprintf(" T%s", formatTurnTime(session.config.turnSeconds)) : "",
 				session.config.name,
 				session.yours ? " [YOURS]" : "",
@@ -92,9 +93,36 @@ drawMain :: proc() {
 	drawSelectorBullet({100, 100}, 20)
 }
 
+// the setups a game can be requested with, see teamSetupAllowed
+@(private="file")
+TeamSetup :: struct {
+	name: string,
+	teamSize: int,
+	// 0 leaves the player count to the PLAYERS row
+	playerCount: int
+}
+@(private="file")
+TEAM_SETUPS := [?]TeamSetup {
+	{ "FREE FOR ALL", 1, 0 },
+	{ "2 TEAMS OF 2", 2, 4 },
+	{ "2 TEAMS OF 3", 3, 6 },
+	{ "3 TEAMS OF 2", 2, 6 },
+}
+@(private="file")
+teamSetupIndex: int
+
+// short tag for the session list, nothing for free for all
+teamSetupLabel :: proc(playerCount: int, teamSize: int) -> string {
+	if teamSize <= 1 do return ""
+	teams := playerCount / teamSize
+	parts := make([]string, teams, context.temp_allocator)
+	for &part in parts do part = fmt.tprint(teamSize)
+	return fmt.tprintf(" %s", strings.join(parts, "V", context.temp_allocator))
+}
+
 @(private="file")
 drawNGRMenu :: proc() {
-	menuNavigation(5)
+	menuNavigation(6)
 
 	if rl.IsKeyPressed(.ENTER) {
 		rl.PlaySound(menuSound)
@@ -132,7 +160,14 @@ drawNGRMenu :: proc() {
 		case 4:
 			if left do menuState.ngr.turnSeconds -= NGR_TURN_STEP
 			if rite do menuState.ngr.turnSeconds += NGR_TURN_STEP
+		case 5:
+			if left do teamSetupIndex -= 1
+			if rite do teamSetupIndex += 1
 	}
+	teamSetupIndex = wrapClamp(teamSetupIndex, 0, len(TEAM_SETUPS) - 1)
+	setup := TEAM_SETUPS[teamSetupIndex]
+	menuState.ngr.teamSize = setup.teamSize
+	if setup.playerCount > 0 do menuState.ngr.playerCount = setup.playerCount
 
 	if left || rite do rl.PlaySound(buttonSound)
 
@@ -143,9 +178,11 @@ drawNGRMenu :: proc() {
 	drawItemButton("< BACK", 0)
 	drawItemButton("REQUEST NEW GAME", 1)
 	drawItemButton(fmt.tprintf("MAP RADIUS: %d TILES", menuState.ngr.mapRadius), 2)
-	drawItemButton(fmt.tprintf("PLAYERS: %d", menuState.ngr.playerCount), 3)
+	// the player count follows the team setup unless it's free for all
+	drawItemButton(fmt.tprintf("PLAYERS: %d", menuState.ngr.playerCount), 3, setup.playerCount > 0 ? rl.GRAY : rl.WHITE)
 	turn := menuState.ngr.turnSeconds
 	drawItemButton(fmt.tprintf("TURN TIMER: %s", turn > 0 ? formatTurnTime(turn) : "OFF"), 4)
+	drawItemButton(fmt.tprintf("MODE: %s", setup.name), 5)
 }
 
 // minutes and seconds

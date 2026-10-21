@@ -22,7 +22,7 @@ Game rules are covered by tests: `odin test tests`
 Specify operating mode if needed:
 ```
 swg-redux --mode client --name username --renderer 3d
-swg-redux --mode server --port 27014
+swg-redux --mode server --port 27014 --players 4 --team-size 2
 swg-redux --mode lobby
 ```
 All parameters are optional
@@ -45,6 +45,7 @@ Enemy guns stay on the map once spotted, until their tile is seen empty.
 Tiles hit by indirekt fire flash a red sector on the side the shells came from.
 Orders can be prepared while other players make theirs, they are submitted on your turn.
 Games can have a turn timer, set when requesting a game in a lobby or with `turn_time` in config.toml. When it runs out, the orders prepared so far are submitted.
+Games are free for all or team games: two teams of two, two teams of three or three teams of two, picked when requesting a game in a lobby or with `team_size` in config.toml. Teams spawn together, share what they see and remember, take turns alternately, and the last team standing wins. Players pick their team after joining, with arrows, and the game starts once everyone pressed `Enter` to confirm.
 
 > [!IMPORTANT]
 > Player names identify you on a server, pick an unique one. The client asks for a name on start unless it's set with `--name` or in config.toml

@@ -63,7 +63,35 @@ RememberedGun :: struct {
 
 GameState :: struct {
 	players: []PlayerState,
-	grid: GameGrid
+	grid: GameGrid,
+	// players per team, 1 for free for all; player i is on team i / teamSize
+	teamSize: int
+}
+
+teamOf :: proc(state: ^GameState, pix: int) -> int {
+	return pix / max(state.teamSize, 1)
+}
+
+sameTeam :: proc(state: ^GameState, a, b: int) -> bool {
+	return teamOf(state, a) == teamOf(state, b)
+}
+
+// explored terrain and remembered guns are shared by a team, kept by its first member
+teamIntel :: proc(state: ^GameState, pix: int) -> ^PlayerState {
+	return &state.players[teamOf(state, pix) * max(state.teamSize, 1)]
+}
+
+// members of a team get the team's color, later members a lighter shade of it
+playerColor :: proc(pix: int, teamSize: int) -> rl.Color {
+	size := max(teamSize, 1)
+	base := PLAYER_COLORS[(pix / size) % len(PLAYER_COLORS)]
+	member := f32(pix % size) * .35
+	return {
+		u8(f32(base.r) + (255 - f32(base.r)) * member),
+		u8(f32(base.g) + (255 - f32(base.g)) * member),
+		u8(f32(base.b) + (255 - f32(base.b)) * member),
+		255
+	}
 }
 
 PLAYER_COLORS := [?]rl.Color {
@@ -118,14 +146,34 @@ findSpawnPoints :: proc(grid: GameGrid) -> [dynamic]hex.Axial {
 	return spawns
 }
 
+// the spawns of findSpawnPoints in order around the map: E, NNE, NNW, W, SSW, SSE
+@(private="file")
+SPAWN_RING := [6]int { 1, 4, 2, 0, 5, 3 }
+
+// which spawn around the map each player gets: teams sit together on one side of the map,
+// free for all players are spread out
+spawnSlots :: proc(playerCount: int, teamSize: int, allocator := context.allocator) -> []int {
+	slots := make([]int, playerCount, allocator)
+	if teamSize > 1 {
+		// contiguous blocks; two teams of two leave a gap between them on either side
+		start := playerCount == 4 ? 1 : 0
+		for i in 0..<playerCount do slots[i] = (start + i + (i >= 2 && playerCount == 4 ? 1 : 0)) % 6
+		return slots
+	}
+	spread := [7][]int { {}, { 0 }, { 0, 3 }, { 0, 2, 4 }, { 0, 1, 3, 4 }, { 0, 1, 2, 3, 4 }, { 0, 1, 2, 3, 4, 5 } }
+	for i in 0..<playerCount do slots[i] = spread[playerCount][i]
+	return slots
+}
+
 GameInitError :: enum { OK, NO_SPAWNS }
-createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> (GameState, GameInitError) {
+createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0), teamSize := 1) -> (GameState, GameInitError) {
 	seed := seed == -1 ? rand.int63() : seed
 	// fmt.println("using seed ", seed)
 
 	state := GameState {
 		grid = hex.grid(mapRadius, hex.GridCell),
-		players = make([]PlayerState, playerCount)
+		players = make([]PlayerState, playerCount),
+		teamSize = max(teamSize, 1)
 	}
 
 	for &cell in state.grid.cells {
@@ -154,18 +202,19 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> (GameSta
 		return state, .NO_SPAWNS
 	}
 
+	slots := spawnSlots(playerCount, state.teamSize, context.temp_allocator)
 	for &player, i in state.players {
 		units := []GameUnit {
 			GameUnit {
 				id = 0,
-				position = spawnPoints[i],
+				position = spawnPoints[SPAWN_RING[slots[i]]],
 				type = .MCV,
 				gold = 2,
 				hidden = false
 			}
 		}
 		player = PlayerState {
-			color = PLAYER_COLORS[i],
+			color = playerColor(i, state.teamSize),
 			units = slice.clone_to_dynamic(units),
 			knownTerrain = make([]bool, len(state.grid.cells)),
 			unitIdCounter = 1
@@ -175,8 +224,9 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0)) -> (GameSta
 	return state, .OK
 }
 
+// what the player sees: the whole team's units look, and the team's memory is shared
 getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
-	player := &state.players[playerIndex]
+	player := teamIntel(state, playerIndex)
 	reducedState := cloneState(state^)
 	for &cell, cellIndex in reducedState.grid.cells {
 		if !cell.visible do continue
@@ -185,13 +235,16 @@ getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 		fallbackFogValue := known ? hex.Fog.TERRAIN : hex.Fog.FOG
 
 		observedByUint := false
-		for &unit in player.units {
-			if
-				hex.distance(unit.position, cell.position.axial) <= VISION[unit.type] &&
-				hex.isVisible(state.grid, unit.position, cell.position.axial)
-			{
-				observedByUint = true
-				break
+		observing: for &teammate, pix in state.players {
+			if !sameTeam(state, pix, playerIndex) do continue
+			for &unit in teammate.units {
+				if
+					hex.distance(unit.position, cell.position.axial) <= VISION[unit.type] &&
+					hex.isVisible(state.grid, unit.position, cell.position.axial)
+				{
+					observedByUint = true
+					break observing
+				}
 			}
 		}
 
@@ -222,7 +275,7 @@ getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 	}
 
 	for &p, index in reducedState.players {
-		if index == playerIndex do continue
+		if sameTeam(state, index, playerIndex) do continue
 
 		for &unit in p.units {
 			unit.hidden = !observed(reducedState, unit.position)
@@ -273,6 +326,8 @@ reduceExplosionsToVisible :: proc(reducedState: ^GameState, playerIx: int, explo
 			append(&redex, bonk)
 			continue
 		} else {
+			// a teammate's shells aren't yours, but they don't give away a teammate's gun either
+			if sameTeam(reducedState, bonk.pix, playerIx) do bonk.side = -1
 			bonk.pix = -1
 		}
 		onGrid := hex.isWithinGrid(bonk.position, reducedState.grid.radius)

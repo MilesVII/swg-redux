@@ -28,6 +28,8 @@ ClientStatus :: enum {
 	LOBBY,
 	CONNECTING,
 	NOT_FULL,
+	// a team game waiting for everyone to pick a team, see drawTeamPicker
+	TEAMS,
 	WAITING,
 	// last turn's explosions are still playing, orders are locked
 	RESOLVING,
@@ -150,7 +152,18 @@ ClientState :: struct {
 	lastHeard: f64,
 	lastPing: f64,
 	// asking whether to leave the game for the lobby
-	leavePrompt: bool
+	leavePrompt: bool,
+	winnerTeam: int,
+	// per slot, from the last update
+	playerNames: []string,
+	playersReady: []bool
+}
+
+// before a team game starts: ask for a team, or confirm the current one
+@(private)
+sendTeamChoice :: proc(team: int, ready: bool) {
+	header := networking.MessageHeader { message = .TEAM, me = utils.stringToBadge(clientState.name) }
+	networking.say(clientState.serverSocket, &header, encode(TeamChoice { team, ready }))
 }
 
 // a red sector flashing once outside the side of a hit tile that faces the gun that fired
@@ -681,6 +694,7 @@ processPackage :: proc(p: networking.Package) {
 	switch p.header.message {
 		case .CONNECTED, .DIAL_FAILED:
 		case .PING:
+		case .TEAM:
 		case .DISCONNECTED:
 			clientState.connection = 0
 			// a finished game has nothing to come back to
@@ -736,7 +750,7 @@ onUpdate :: proc(payload: []u8) {
 		deleteUpdate(&clientUpdateBuffer)
 		return
 	}
-	clientPendingState = GameState { players = clientUpdateBuffer.players, grid = grid }
+	clientPendingState = GameState { players = clientUpdateBuffer.players, grid = grid, teamSize = clientUpdateBuffer.teamSize }
 	clientUpdateBuffer.players = nil
 	delete(clientUpdateBuffer.cells)
 	clientUpdateBuffer.cells = nil
@@ -753,15 +767,12 @@ onUpdate :: proc(payload: []u8) {
 	running := meta.turnLimit > 0 && clientUpdateBuffer.gameStarted && !clientUpdateBuffer.gameOver
 	clientState.turnDeadline = running ? rl.GetTime() + f64(meta.turnTimeLeft) : 0
 	setNotice("")
+	previousPix := clientState.myPix
 	clientState.myPix = clientUpdateBuffer.meta.yourId
 
 	if clientFirstUpdate {
 		applyBufferedUpdate()
-		if clientState.myPix >= 0 && clientState.myPix < len(clientState.game.players) {
-			units := clientState.game.players[clientState.myPix].units
-			if len(units) > 0 do for view in CLIENT_VIEWS do view.focus(units[0].position)
-		}
-
+		focusOnOwnUnits()
 		clientFirstUpdate = false
 	} else if len(clientUpdateBuffer.explosions) > 0 {
 		// keep orders locked until the explosions land and the new state is applied
@@ -770,6 +781,9 @@ onUpdate :: proc(payload: []u8) {
 	} else {
 		applyBufferedUpdate()
 	}
+
+	// switching teams before the start moves the player to another spawn
+	if previousPix != clientState.myPix && !clientUpdateBuffer.gameStarted do focusOnOwnUnits()
 
 	for bonk in clientUpdateBuffer.explosions {
 		append(
@@ -787,6 +801,13 @@ onUpdate :: proc(payload: []u8) {
 	}
 }
 
+@(private="file")
+focusOnOwnUnits :: proc() {
+	if clientState.myPix < 0 || clientState.myPix >= len(clientState.game.players) do return
+	units := clientState.game.players[clientState.myPix].units
+	if len(units) > 0 do for view in CLIENT_VIEWS do view.focus(units[0].position)
+}
+
 // moves state and captions out of the buffer and updates the status
 @(private="file")
 applyBufferedUpdate :: proc() {
@@ -802,6 +823,15 @@ applyBufferedUpdate :: proc() {
 	delete(clientState.winnerName)
 	clientState.winnerName = clientUpdateBuffer.winnerBadge
 	clientUpdateBuffer.winnerBadge = ""
+	clientState.winnerTeam = clientUpdateBuffer.winnerTeam
+
+	for name in clientState.playerNames do delete(name)
+	delete(clientState.playerNames)
+	delete(clientState.playersReady)
+	clientState.playerNames = clientUpdateBuffer.playerNames
+	clientState.playersReady = clientUpdateBuffer.playersReady
+	clientUpdateBuffer.playerNames = nil
+	clientUpdateBuffer.playersReady = nil
 
 	pruneOrders()
 	promoteStatusChange()
@@ -825,7 +855,7 @@ promoteStatusChange :: proc() {
 		case clientUpdateBuffer.gameOver:
 			clientState.status = .FINISH
 		case !clientUpdateBuffer.gameStarted:
-			clientState.status = .NOT_FULL
+			clientState.status = clientUpdateBuffer.teamSize > 1 ? .TEAMS : .NOT_FULL
 		case clientUpdateBuffer.meta.activeIsYou:
 			clientState.status = .PLAYING
 		case:

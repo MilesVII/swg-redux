@@ -18,6 +18,7 @@ players = 2
 radius = 16 # map radius
 # seed = 0 # random unless specified
 turn_time = 0 # seconds per turn, 0 for no limit
+team_size = 1 # players per team: 1 for free for all, 2 with 4 or 6 players, 3 with 6
 
 [lobby]
 game_ports = "7420-7500"

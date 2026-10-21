@@ -32,8 +32,22 @@ Update :: struct {
 	explosions: []ExplosionBufferEntry,
 	gameStarted: bool,
 	gameOver: bool,
-	// empty if nobody survived
-	winnerBadge: string
+	// players per team, 1 for free for all
+	teamSize: int,
+	// names of the winners joined with " & ", empty if nobody survived
+	winnerBadge: string,
+	// -1 if nobody survived
+	winnerTeam: int,
+	// per slot, "" while empty
+	playerNames: []string,
+	// per slot, whether the player confirmed their team; only team games wait for it
+	playersReady: []bool
+}
+
+// a player's choice before a team game starts
+TeamChoice :: struct {
+	team: int,
+	ready: bool
 }
 
 ExplosionBufferEntry :: struct {
@@ -147,5 +161,8 @@ deleteUpdate :: proc(update: ^Update) {
 	delete(update.explosions)
 	delete(update.meta.currentPlayerBadge)
 	delete(update.winnerBadge)
+	for name in update.playerNames do delete(name)
+	delete(update.playerNames)
+	delete(update.playersReady)
 	update^ = {}
 }

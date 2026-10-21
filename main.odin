@@ -54,6 +54,7 @@ main :: proc () {
 				config.server.radius,
 				config.server.seed,
 				config.server.turnTime,
+				config.server.teamSize,
 				config.common.local,
 				config.common.port,
 				config.common.lobbyPort

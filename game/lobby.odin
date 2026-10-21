@@ -18,7 +18,19 @@ NewGameRequest :: struct {
 	mapSeed: i64,
 	mapRadius: int,
 	// seconds per turn, 0 for no limit
-	turnSeconds: int
+	turnSeconds: int,
+	// players per team, 1 for free for all
+	teamSize: int
+}
+
+// team setups the hexagonal map allows: six spawns, one per corner
+teamSetupAllowed :: proc(playerCount: int, teamSize: int) -> bool {
+	switch teamSize {
+		case 1: return playerCount >= NGR_PLAYERS_RANGE[0] && playerCount <= NGR_PLAYERS_RANGE[1]
+		case 2: return playerCount == 4 || playerCount == 6
+		case 3: return playerCount == 6
+	}
+	return false
 }
 
 NGR_RADIUS_RANGE :: [2]int { 4, 64 }
@@ -169,6 +181,7 @@ processPackage :: proc(p: networking.Package) {
 		case .PING:
 			header := networking.MessageHeader { message = .PING }
 			networking.say(p.socket, &header)
+		case .TEAM:
 		case .DIAL_FAILED:
 		case .JOIN:
 		case .CONNECTED:
@@ -212,10 +225,12 @@ requestNewGame :: proc(p: networking.Package) {
 		return
 	}
 
+	// requests without a team size are free for all
+	newGame.teamSize = max(newGame.teamSize, 1)
 	radiusOk := newGame.mapRadius >= NGR_RADIUS_RANGE[0] && newGame.mapRadius <= NGR_RADIUS_RANGE[1]
 	playersOk := newGame.playerCount >= NGR_PLAYERS_RANGE[0] && newGame.playerCount <= NGR_PLAYERS_RANGE[1]
 	turnOk := newGame.turnSeconds >= NGR_TURN_RANGE[0] && newGame.turnSeconds <= NGR_TURN_RANGE[1]
-	if !radiusOk || !playersOk || !turnOk {
+	if !radiusOk || !playersOk || !turnOk || !teamSetupAllowed(newGame.playerCount, newGame.teamSize) {
 		sendNotice(p.socket, "INVALID GAME PARAMETERS")
 		return
 	}
@@ -251,7 +266,8 @@ requestNewGame :: proc(p: networking.Package) {
 			"--players", fmt.tprint(newGame.playerCount),
 			"--radius", fmt.tprint(newGame.mapRadius),
 			"--seed", fmt.tprint(newGame.mapSeed),
-			"--turn-time", fmt.tprint(newGame.turnSeconds)
+			"--turn-time", fmt.tprint(newGame.turnSeconds),
+			"--team-size", fmt.tprint(max(newGame.teamSize, 1))
 		},
 		stdout = pipeW,
 		// nil would shut the child's stderr, keep it on the lobby's console

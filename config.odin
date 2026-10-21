@@ -23,6 +23,7 @@ Options :: struct {
 	seed: i64,
 	port: int,
 	turnTime: int `args:"name=turn-time"`,
+	teamSize: int `args:"name=team-size"`,
 }
 
 TOKEN_LENGTH :: 64
@@ -52,7 +53,9 @@ Config :: struct {
 		seed: i64,
 		managed: bool,
 		// seconds per turn, 0 for no limit
-		turnTime: int
+		turnTime: int,
+		// players per team, 1 for free for all
+		teamSize: int
 	},
 	lobby: struct {
 		portRange: [2]int,
@@ -82,7 +85,8 @@ DEFAULT_CONFIG := Config {
 		radius = 16,
 		seed = -1,
 		managed = false,
-		turnTime = 0
+		turnTime = 0,
+		teamSize = 1
 	},
 	lobby = {
 		portRange = { 7420, 7500 }
@@ -115,7 +119,10 @@ config :: proc() -> Config {
 		} else do fmt.println("unknown renderer:", options.renderer)
 	}
 	if options.port != 0 do config.common.port = options.port
+	if options.players > 0 do config.server.players = options.players
+	if options.radius > 0 do config.server.radius = options.radius
 	if options.turnTime > 0 do config.server.turnTime = options.turnTime
+	if options.teamSize > 0 do config.server.teamSize = options.teamSize
 	if config.common.mode == .server && options.managed {
 		config.server.managed = true
 		config.server.players = options.players
@@ -210,6 +217,9 @@ readFileConfig :: proc(filename: string, config: ^Config) {
 
 		turnTime, turnTimeFound := toml.get(i64, serverTable, "turn_time")
 		if turnTimeFound do config.server.turnTime = int(turnTime)
+
+		teamSize, teamSizeFound := toml.get(i64, serverTable, "team_size")
+		if teamSizeFound do config.server.teamSize = int(teamSize)
 	}
 
 	lobbyTable, lobbyTableFound := toml.get_table(section, "lobby")

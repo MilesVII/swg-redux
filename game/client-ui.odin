@@ -397,9 +397,11 @@ clientDrawHUD :: proc() {
 	}
 	finishStatus :: proc() -> cstring {
 		if len(clientState.winnerName) == 0 do return "GAME OVER, NOBODY SURVIVED"
-		myBadge := utils.badgeToString(utils.stringToBadge(clientState.name), context.temp_allocator)
-		if clientState.winnerName == myBadge do return "GAME OVER, YOU WON"
-		return fmt.ctprintf("GAME OVER, PLAYER %s WON", clientState.winnerName)
+		teams := clientState.game.teamSize > 1
+		if clientState.winnerTeam == teamOf(&clientState.game, clientState.myPix) {
+			return teams ? "GAME OVER, YOUR TEAM WON" : "GAME OVER, YOU WON"
+		}
+		return fmt.ctprintf(teams ? "GAME OVER, TEAM %s WON" : "GAME OVER, PLAYER %s WON", clientState.winnerName)
 	}
 	getStatusString :: proc() -> (cstring, rl.Color) {
 		switch clientState.status {
@@ -408,6 +410,7 @@ clientDrawHUD :: proc() {
 			case .LOBBY:        return "", rl.WHITE
 			case .CONNECTING:   return "CONNECTING TO GAME SERVER", rl.WHITE
 			case .NOT_FULL:     return "WAITING FOR PLAYERS TO JOIN", rl.WHITE
+			case .TEAMS:        return "", rl.WHITE
 			case .RESOLVING:    return "EXECUTING ORDERS", rl.WHITE
 			case .PLAYING:      return "YOUR TURN", rl.RED
 			case .WAITING:      return nameStatus(), rl.WHITE
@@ -465,6 +468,8 @@ clientDrawHUD :: proc() {
 		drawLeavePrompt()
 		return
 	}
+	if clientState.status == .TEAMS do drawTeamPicker()
+	else do resetTeamPicker()
 	if !canPlanOrders() do return
 
 	if getSelectedUnit() != nil {
