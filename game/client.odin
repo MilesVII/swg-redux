@@ -4,6 +4,7 @@ import rl "vendor:raylib"
 
 import "core:net"
 import "core:strings"
+import "core:math/rand"
 import synchan "core:sync/chan"
 
 import "hex"
@@ -12,12 +13,16 @@ import "utils"
 import "networking"
 import "shaded"
 
-@(private)
 EXPLOSION_DURATION_S := f32(1.2)
 @(private)
 EXPLOSION_HATTRICK_S := f32(0.32)
-@(private)
-EXPLOSION_CHAINING_S := f32(0.5)
+// the next explosion starts this long after the previous one, picked at random per explosion
+EXPLOSION_GAP_RANGE := [2]f32 { .3, .7 }
+// a whole salvo plays within this long, gaps are compressed to fit
+EXPLOSIONS_MAX_S := f32(10)
+EXPLOSION_MIN_GAP_S := f32(.05)
+// the hit sound varies this much around its normal pitch
+EXPLOSION_PITCH_RANGE := [2]f32 { .92, 1.08 }
 @(private)
 FRAG_COUNTER_DISAPPEAR_S := f32(4.2)
 
@@ -114,6 +119,9 @@ Explosion :: struct {
 	impacted: bool,
 	// the hit has been applied to the state
 	bonked: bool,
+	// seconds after this one starts before the next may, see scheduleExplosions
+	gap: f32,
+	pitch: f32,
 	// tile side the shell came from, -1 when unknown, see ExplosionBufferEntry
 	side: int
 }
@@ -482,7 +490,7 @@ clientPostFX :: proc(tex: rl.RenderTexture2D) {
 }
 
 // explosion timeline shared by all views: each bonk starts once the previous one
-// is EXPLOSION_CHAINING_S old, hits after EXPLOSION_HATTRICK_S and expires after
+// is its gap old, hits after EXPLOSION_HATTRICK_S and expires after
 // EXPLOSION_DURATION_S, then the buffered server state is applied
 @(private="file")
 updateExplosions :: proc() {
@@ -490,6 +498,7 @@ updateExplosions :: proc() {
 
 	for &bonk in clientState.explosions {
 		if bonk.elapsedTime == 0 {
+			rl.SetSoundPitch(hitSound, bonk.pitch)
 			rl.PlaySound(hitSound)
 			if activeView.onExplosionStart != nil do activeView.onExplosionStart(bonk)
 		}
@@ -516,7 +525,7 @@ updateExplosions :: proc() {
 				else do unordered_remove(&clientState.game.players[pix].units, uix)
 			}
 		}
-		if bonk.elapsedTime < EXPLOSION_CHAINING_S do break
+		if bonk.elapsedTime < bonk.gap do break
 	}
 
 	if allExplosionsBonked() && clientState.fragCounterTTS == 0 {
@@ -799,6 +808,23 @@ onUpdate :: proc(payload: []u8) {
 			}
 		)
 	}
+	scheduleExplosions(clientState.explosions[:])
+}
+
+// random gaps and pitches, with the gaps compressed so the salvo fits EXPLOSIONS_MAX_S
+scheduleExplosions :: proc(explosions: []Explosion) {
+	if len(explosions) == 0 do return
+	total := f32(0)
+	for &bonk, i in explosions {
+		bonk.gap = EXPLOSION_GAP_RANGE[0] + rand.float32() * (EXPLOSION_GAP_RANGE[1] - EXPLOSION_GAP_RANGE[0])
+		bonk.pitch = EXPLOSION_PITCH_RANGE[0] + rand.float32() * (EXPLOSION_PITCH_RANGE[1] - EXPLOSION_PITCH_RANGE[0])
+		// the last one's gap leads nowhere
+		if i < len(explosions) - 1 do total += bonk.gap
+	}
+	budget := EXPLOSIONS_MAX_S - EXPLOSION_DURATION_S
+	if total <= budget do return
+	scale := budget / total
+	for &bonk in explosions do bonk.gap = max(bonk.gap * scale, EXPLOSION_MIN_GAP_S)
 }
 
 @(private="file")

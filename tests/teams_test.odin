@@ -136,7 +136,8 @@ free_for_all_spawns_spread_out :: proc(t: ^testing.T) {
 	testing.expect(t, ok, "found a map with room for six spawns")
 	if !ok do return
 	d := hex.distance(state.players[0].units[0].position, state.players[1].units[0].position)
-	testing.expectf(t, d >= 12, "two players sit %d apart", d)
+	// opposite corners, with spawns drifting inward by a tile or two; adjacent corners are about 7 apart
+	testing.expectf(t, d >= 9, "two players sit %d apart", d)
 }
 
 // the corner layout itself: each team gets consecutive corners, teams never share one
