@@ -863,16 +863,21 @@ applyBufferedUpdate :: proc() {
 	promoteStatusChange()
 }
 
-// drops orders of units that are gone
+// drops orders that the new state no longer allows: units that are gone, targets that got
+// occupied or dug out, shots out of sight; orders planned while waiting are the usual victims
 @(private="file")
 pruneOrders :: proc() {
 	if clientState.myPix < 0 || clientState.myPix >= len(clientState.game.players) do return
-	units := clientState.game.players[clientState.myPix].units[:]
+	dropped := 0
 	gone := make([dynamic]int, context.temp_allocator)
-	for unitId in clientState.orders {
-		if _, found := findUnitById(units, unitId); !found do append(&gone, unitId)
+	for unitId, &list in clientState.orders {
+		kept, lost := validOrders(&clientState.game, clientState.myPix, unitId, list)
+		dropped += lost
+		if kept.count == 0 do append(&gone, unitId)
+		else do list = kept
 	}
 	for unitId in gone do delete_key(&clientState.orders, unitId)
+	if dropped > 0 do setNotice(dropped == 1 ? "AN ORDER WAS DROPPED, ITS TARGET IS NO LONGER VALID" : "SOME ORDERS WERE DROPPED, THEIR TARGETS ARE NO LONGER VALID")
 }
 
 @(private="file")

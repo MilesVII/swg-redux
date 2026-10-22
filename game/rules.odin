@@ -77,6 +77,29 @@ executeOrder :: proc(state: ^GameState, playerIx: int, unitId: int, order: Order
 	}
 }
 
+// the orders of a list that still hold on this state, in order; queued builds and digs
+// also have to fit the unit's gold one after another
+validOrders :: proc(state: ^GameState, playerIx: int, unitId: int, list: OrderList) -> (kept: OrderList, dropped: int) {
+	list := list
+	unit, found := findUnitById(state.players[playerIx].units[:], unitId)
+	if !found do return {}, list.count
+	// gold as it would be once the kept orders ran
+	projected := unit^
+	for order in listedOrders(&list) {
+		if !orderAllowed(state, projected, order) || kept.count >= MAX_UNIT_ORDERS {
+			dropped += 1
+			continue
+		}
+		kept.items[kept.count] = order
+		kept.count += 1
+		#partial switch order.type {
+			case .BUILD: projected.gold -= 1
+			case .DIG: projected.gold += 1
+		}
+	}
+	return kept, dropped
+}
+
 // mirrors the checks the client does before placing an order
 orderAllowed :: proc(state: ^GameState, unit: GameUnit, order: Order) -> bool {
 	grid := state.grid

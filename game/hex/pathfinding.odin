@@ -132,33 +132,34 @@ findPath :: proc(grid: Grid(GridCell), from: Axial, to: Axial, allocator := cont
 	return nil, false
 }
 
+// cells a unit can walk to in fewer than `limit` steps along walkable cells, including where it stands;
+// a breadth first search, so winding paths around obstacles count their real length
 findWalkableOutline :: proc (grid: Grid(GridCell), from: Axial, limit: int, allocator := context.allocator) -> []Axial {
-	gridMap := make(map[Axial]bool)
-	defer delete(gridMap)
-	shockwave := make([dynamic]Axial, allocator)
+	steps := make(map[Axial]int)
+	defer delete(steps)
+	queue := make([dynamic]Axial, context.temp_allocator)
 
-	gridMap[from] = true
-	append(&shockwave, from)
+	steps[from] = 0
+	append(&queue, from)
 
-	for len(shockwave) > 0 {
-		current := pop(&shockwave)
+	for head := 0; head < len(queue); head += 1 {
+		current := queue[head]
+		next := steps[current] + 1
+		if next >= limit do continue
 
 		for nb in AXIAL_NBS {
 			tested := current + nb
-			d := distance(tested, from)
-
-			if d >= limit do continue
-			if tested in gridMap do continue
+			if tested in steps do continue
 			if !cellIsWalkable(tested, grid) do continue
 
-			gridMap[tested] = true
-			append(&shockwave, tested)
+			steps[tested] = next
+			append(&queue, tested)
 		}
 	}
 
-	for cell in gridMap do append(&shockwave, cell)
-
-	return shockwave[:]
+	reachable := make([dynamic]Axial, 0, len(steps), allocator)
+	for cell in steps do append(&reachable, cell)
+	return reachable[:]
 }
 
 cellIsWalkable :: proc(position: Axial, grid: Grid(GridCell)) -> bool {
