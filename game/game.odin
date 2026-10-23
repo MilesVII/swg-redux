@@ -12,7 +12,7 @@ import "utils"
 
 HEIGHTS :: 11
 
-MOUNTAIN_COLOR := rl.Color{154, 66, 66, 255}
+MOUNTAIN_COLOR := rl.Color{ 154, 66, 66, 255 }
 
 colors : [HEIGHTS]rl.Color = {
 	rl.BLUE,
@@ -33,9 +33,9 @@ WALKABLE_HI :: 6
 GameGrid :: hex.Grid(hex.GridCell)
 
 GameUnitType :: enum { TONK, GUN, MCV, REC }
-VISION := [GameUnitType] int { .TONK = 5, .GUN = 2, .MCV = 4, .REC = 8 }
+VISION := [GameUnitType] int { .TONK = 4, .GUN = 2, .MCV = 4, .REC = 8 }
 MOVING := [GameUnitType] int { .TONK = 4, .GUN = 0, .MCV = 4, .REC = 5 }
-ARANGE := [GameUnitType] int { .TONK = 5, .GUN = 8, .MCV = 0, .REC = 0 }
+ARANGE := [GameUnitType] int { .TONK = 6, .GUN = 8, .MCV = 0, .REC = 0 }
 INDIREKT_BARRAGE_SIZE := 3
 
 GameUnit :: struct {
