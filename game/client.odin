@@ -36,6 +36,8 @@ ClientStatus :: enum {
 	// a team game waiting for everyone to pick a team, see drawTeamPicker
 	TEAMS,
 	WAITING,
+	// no MCV left while the game goes on, watching only
+	LOST,
 	// last turn's explosions are still playing, orders are locked
 	RESOLVING,
 	PLAYING,
@@ -768,7 +770,6 @@ onUpdate :: proc(payload: []u8) {
 		clientUpdateBuffer.explosions = nil
 	}
 
-	rl.PlaySound(menuSound)
 	clientState.cameraControlsEnabled = true
 	// queued orders survive other players' turns, they're cleared when submitted
 	clientState.ordersSent = false
@@ -882,18 +883,37 @@ pruneOrders :: proc() {
 
 @(private="file")
 promoteStatusChange :: proc() {
+	previous := clientState.status
 	switch {
 		case clientUpdateBuffer.gameOver:
 			clientState.status = .FINISH
 		case !clientUpdateBuffer.gameStarted:
 			clientState.status = clientUpdateBuffer.teamSize > 1 ? .TEAMS : .NOT_FULL
+		case hasLost():
+			clientState.status = .LOST
 		case clientUpdateBuffer.meta.activeIsYou:
 			clientState.status = .PLAYING
 		case:
 			clientState.status = .WAITING
 	}
+	// your turn has come
+	if clientState.status == .PLAYING && previous != .PLAYING do rl.PlaySound(menuSound)
+	// out of the game: nothing left to order
+	if clientState.status == .LOST && previous != .LOST {
+		clear(&clientState.orders)
+		clear(&clientState.storedGunOrders)
+		selectedUnitId = NO_SELECTION
+	}
 	// keeps a placement that's in progress
 	if canPlanOrders() && clientState.uiState == .DISABLED do clientState.uiState = .FREE
+}
+
+// without an MCV a player is out, their turns are skipped by the server
+@(private)
+hasLost :: proc() -> bool {
+	if clientState.myPix < 0 || clientState.myPix >= len(clientState.game.players) do return false
+	for unit in clientState.game.players[clientState.myPix].units do if unit.type == .MCV do return false
+	return true
 }
 
 @(private)

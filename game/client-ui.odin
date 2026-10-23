@@ -414,6 +414,7 @@ clientDrawHUD :: proc() {
 			case .RESOLVING:    return "EXECUTING ORDERS", rl.WHITE
 			case .PLAYING:      return "YOUR TURN", rl.RED
 			case .WAITING:      return nameStatus(), rl.WHITE
+			case .LOST:         return fmt.ctprintf("YOU ARE OUT, %s", nameStatus()), rl.RED
 			case .FINISH:       return finishStatus(), rl.WHITE
 			case .DISCONNECTED: return clientState.dialTicket != 0 ? "RECONNECTING" : "DISCONNECTED", rl.RED
 		}

@@ -84,6 +84,9 @@ overlayPath3D :: proc(path: hex.Path, color: rl.Color) {
 	points := make([]rl.Vector2, len(path), context.temp_allocator)
 	for cell, i in path do points[len(path) - 1 - i] = hex.axialToWorld(cell)
 	points[0] = points[0] + (points[1] - points[0]) * .35
+	// stops half a tile short of the destination, like direct fire
+	last := len(points) - 1
+	points[last] = points[last] + (points[last - 1] - points[last]) * .5
 
 	STEP :: f32(.05)
 	DASH :: f32(.32)
