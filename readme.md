@@ -21,6 +21,8 @@ odin build . -define:HEADLESS=true
 
 Game rules are covered by tests: `odin test tests`
 
+`manage.sh` runs a lobby deployment on Linux: it shows whether `/opt/swgr/swgr` (or `SWGR_EXE`) runs with its game servers, starts or stops it, and updates it with `git pull` and a headless build.
+
 Specify operating mode if needed:
 ```
 swg-redux --mode client --name username --renderer 3d
