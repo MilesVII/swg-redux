@@ -180,6 +180,23 @@ bonkUnits :: proc(state: ^GameState, explosions: []ExplosionBufferEntry) {
 			if leavesScrap do cell.scrap = true
 		}
 	}
+	forgetGunsHit(state, explosions)
+}
+
+// a shell landing on a remembered gun's tile is always seen (the tile was observed once),
+// so whoever remembers the gun learns it's gone
+@(private="file")
+forgetGunsHit :: proc(state: ^GameState, explosions: []ExplosionBufferEntry) {
+	for &player in state.players {
+		for i := len(player.knownGuns) - 1; i >= 0; i -= 1 {
+			gun := player.knownGuns[i]
+			if _, exists := findUnitById(state.players[gun.pix].units[:], gun.id); exists do continue
+			for bonk in explosions do if bonk.position == gun.position {
+				unordered_remove(&player.knownGuns, i)
+				break
+			}
+		}
+	}
 }
 
 // the last team standing wins, a team stands while any member has an MCV

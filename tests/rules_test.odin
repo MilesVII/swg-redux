@@ -207,6 +207,43 @@ seen_guns_are_remembered :: proc(t: ^testing.T) {
 }
 
 @(test)
+remembered_guns_hit_blind_are_forgotten :: proc(t: ^testing.T) {
+	// fixtures are thrown away with the test
+	context.allocator = context.temp_allocator
+	state := makeState(2)
+	addUnit(&state, 0, 1, .MCV, { 0, 0 })
+	addUnit(&state, 0, 2, .GUN, { -3, 0 }, game.GUN_SHELLS)
+	addUnit(&state, 1, 7, .GUN, { 2, 0 }, game.GUN_SHELLS)
+
+	seen := game.getStateForPlayer(&state, 0)
+	game.deleteState(seen)
+	testing.expect_value(t, len(state.players[0].knownGuns), 1)
+
+	// the MCV walks away, the gun shells the remembered tile blind
+	state.players[0].units[0].position = { -4, 0 }
+	explosions: [dynamic]game.ExplosionBufferEntry
+	append(&explosions, game.ExplosionBufferEntry { position = { 2, 0 }, pix = 0 })
+	game.bonkUnits(&state, explosions[:])
+
+	testing.expect(t, explosions[0].lethal, "the gun was hit")
+	testing.expect_value(t, len(state.players[0].knownGuns), 0)
+	after := game.getStateForPlayer(&state, 0)
+	testing.expect_value(t, len(after.players[1].units), 0)
+	game.deleteState(after)
+
+	// a shell on a tile where a remembered gun stands keeps the memory
+	addUnit(&state, 1, 8, .GUN, { 2, 1 }, game.GUN_SHELLS)
+	state.players[0].units[0].position = { 0, 0 }
+	again := game.getStateForPlayer(&state, 0)
+	game.deleteState(again)
+	state.players[0].units[0].position = { -4, 0 }
+	clear(&explosions)
+	append(&explosions, game.ExplosionBufferEntry { position = { 2, 2 }, pix = 0 })
+	game.bonkUnits(&state, explosions[:])
+	testing.expect_value(t, len(state.players[0].knownGuns), 1)
+}
+
+@(test)
 other_units_are_not_remembered :: proc(t: ^testing.T) {
 	// fixtures are thrown away with the test
 	context.allocator = context.temp_allocator
