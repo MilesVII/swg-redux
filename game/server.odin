@@ -1,8 +1,10 @@
 package game
 
 import "core:fmt"
+import "core:os"
 import "core:strings"
 import "core:time"
+import "core:math/rand"
 import "core:net"
 import synchan "core:sync/chan"
 
@@ -41,7 +43,12 @@ Session :: struct {
 	emptySince: time.Time,
 	// 0 for no limit
 	turnLimit: time.Duration,
-	turnStarted: time.Time
+	turnStarted: time.Time,
+	// the game as it happened, offered to the players once it's over
+	replay: Replay,
+	replayTurns: [dynamic]ReplayTurn,
+	replayBytes: []u8,
+	replayName: string
 }
 
 @(private="file")
@@ -78,11 +85,17 @@ server :: proc(managed: bool, playerCount: int, mapRadius: int, mapSeed: i64, tu
 
 	for &player in session.players do player.online = false
 
-	gameInitRetries := 7
+	// small maps are often too cramped for six spawns, random seeds get plenty of tries
+	gameInitRetries := 40
 	for gameInitRetries >= 0 {
 		err: GameInitError
-		session.game, err = createGame(playerCount, mapRadius, mapSeed, teamSize)
-		if err == .OK do break
+		// the seed is kept for the replay, so it's picked here rather than in createGame
+		seed := mapSeed == -1 ? rand.int63() : mapSeed
+		session.game, err = createGame(playerCount, mapRadius, seed, teamSize)
+		if err == .OK {
+			session.replay = { version = REPLAY_VERSION, radius = mapRadius, playerCount = playerCount, teamSize = max(teamSize, 1), seed = seed }
+			break
+		}
 		else if gameInitRetries == 0 || mapSeed != -1 {
 			utils.log("failed to create a game, aborting")
 			if session.managed do signalLobby(LOBBY_SIGNAL_TERMINATE)
@@ -141,6 +154,11 @@ processPackage :: proc(p: networking.Package) {
 		case .PING:
 			header := networking.MessageHeader { message = .PING }
 			networking.say(p.socket, &header)
+		case .REPLAY_REQUEST:
+			if session.replayBytes == nil do break
+			header := networking.MessageHeader { message = .REPLAY }
+			networking.say(p.socket, &header, encode(ReplayFile { session.replayName, session.replayBytes }))
+		case .REPLAY:
 		case .TEAM:
 			if gameStarted() || session.game.teamSize <= 1 do break
 			choice: TeamChoice
@@ -188,10 +206,13 @@ processPackage :: proc(p: networking.Package) {
 // resolves the active player's orders and hands the turn to the next player
 @(private="file")
 endTurn :: proc(orders: OrderSet) {
-	executeOrders(&session.game, session.activePlayerIx, orders, &explosionsBuffer)
+	seed := rand.uint64()
+	recordTurn(session.activePlayerIx, seed, orders)
+	executeOrders(&session.game, session.activePlayerIx, orders, &explosionsBuffer, seed)
 	bonkUnits(&session.game, explosionsBuffer[:])
 
 	session.over = gameOver(&session.game)
+	if session.over do finishReplay()
 
 	if !session.over do for {
 		nextPlayer()
@@ -303,7 +324,41 @@ startGameIfFull :: proc() {
 	if session.managed do signalLobby(LOBBY_SIGNAL_FULL)
 	session.activePlayerIx = 0
 	session.turnStarted = time.now()
+
+	// the slots are settled now, the replay needs the names
+	names := make([]string, len(session.players))
+	for player, i in session.players do names[i] = strings.clone(player.id.? or_else NAME_PLACEHOLDER)
+	session.replay.names = names
+
 	broadcastUpdates()
+}
+
+@(private="file")
+recordTurn :: proc(player: int, seed: u64, orders: OrderSet) {
+	copied := make(OrderSet)
+	for unitId, list in orders do copied[unitId] = list
+	append(&session.replayTurns, ReplayTurn { player, seed, copied })
+}
+
+// encodes the finished game and keeps the file under replays/
+@(private="file")
+finishReplay :: proc() {
+	session.replay.turns = session.replayTurns[:]
+	session.replayBytes = encode(session.replay)
+
+	y, mon, d := time.date(time.now())
+	h, min, sec := time.clock(time.now())
+	parts := make([dynamic]string, context.temp_allocator)
+	for name in session.replay.names do append(&parts, name)
+	session.replayName = fmt.aprintf("%04d%02d%02d-%02d%02d%02d-%s.replay", y, int(mon), d, h, min, sec, strings.join(parts[:], "-", context.temp_allocator))
+
+	if err := os.make_directory_all("replays"); err != nil && err != .Exist {
+		utils.log("can't create the replays folder: ", err)
+		return
+	}
+	path := fmt.tprintf("replays/%s", session.replayName)
+	if err := os.write_entire_file(path, session.replayBytes); err != nil do utils.log("can't write ", path, ": ", err)
+	else do utils.log("replay saved as ", path)
 }
 
 @(private="file")
@@ -364,30 +419,6 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 	header := networking.MessageHeader {
 		message = .UPDATE,
 	}
-	// explosions are filtered by what the player sees, even once the whole map is revealed
-	visibleState := getStateForPlayer(&session.game, playerIndex)
-	defer deleteState(visibleState)
-	reducedState := session.over ? session.game : visibleState
-	explosions := reduceExplosionsToVisible(&visibleState, playerIndex, explosionsBuffer[:])
-	defer delete(explosions)
-
-	player := &session.players[playerIndex]
-	cells := reducedState.grid.cells
-	fullGrid := player.sentCells == nil || len(player.sentCells) != len(cells)
-	packedCells := packCellChanges(cells, fullGrid ? nil : player.sentCells)
-	defer delete(packedCells)
-
-	if fullGrid {
-		delete(player.sentCells)
-		player.sentCells = make([]hex.GridCell, len(cells))
-	}
-	for cell, i in cells do player.sentCells[i] = cell.value
-
-	// units only, explored cells of other players are none of the receiver's business
-	players := make([]PlayerState, len(reducedState.players), context.temp_allocator)
-	for p, i in reducedState.players {
-		players[i] = PlayerState { color = p.color, units = p.units, unitIdCounter = p.unitIdCounter }
-	}
 
 	names := make([]string, len(session.players), context.temp_allocator)
 	ready := make([]bool, len(session.players), context.temp_allocator)
@@ -396,31 +427,23 @@ sendUpdate :: proc(socket: net.TCP_Socket, playerIndex: int) {
 		ready[i] = p.ready
 	}
 
-	update := Update {
-		radius = reducedState.grid.radius,
-		fullGrid = fullGrid,
-		cells = packedCells,
-		players = players,
-		meta = {
-			activePlayer = session.activePlayerIx,
-			activeIsYou = playerIndex == session.activePlayerIx,
-			yourColor = session.game.players[playerIndex].color,
-			yourId = playerIndex,
-			currentPlayerBadge = getActivePlayerName(),
-			turnLimit = f32(time.duration_seconds(session.turnLimit)),
-			turnTimeLeft = turnTimeLeft()
-		},
-		explosions = explosions[:],
-		gameStarted = gameStarted(),
-		gameOver = session.over,
-		teamSize = session.game.teamSize,
-		winnerBadge = session.over ? getWinnerName() : "",
+	source := UpdateSource {
+		game = &session.game,
+		playerIndex = playerIndex,
+		activePlayer = session.activePlayerIx,
+		started = gameStarted(),
+		over = session.over,
+		explosions = explosionsBuffer[:],
+		names = names,
+		ready = ready,
+		activeName = getActivePlayerName(),
+		winnerName = session.over ? getWinnerName() : "",
 		winnerTeam = session.over ? getWinnerTeam() : -1,
-		playerNames = names,
-		playersReady = ready
+		turnLimit = f32(time.duration_seconds(session.turnLimit)),
+		turnTimeLeft = turnTimeLeft(),
+		replayAvailable = session.replayBytes != nil
 	}
-
-	networking.say(socket, &header, encode(update))
+	networking.say(socket, &header, encodeUpdate(source, &session.players[playerIndex].sentCells))
 }
 
 // teams alternate: with two teams of two the order is 0, 2, 1, 3

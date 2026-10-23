@@ -36,6 +36,12 @@ acceptedCharacter :: proc(r: rune) -> (u8, bool) {
 // asks before leaving a running game for the lobby, keys are handled in handleClientHotkeys
 @(private)
 drawLeavePrompt :: proc() {
+	drawPromptBox("LEAVE THE GAME?", "ENTER TO LEAVE, ESC TO STAY")
+}
+
+// a yes-or-no question in the middle of the screen
+@(private)
+drawPromptBox :: proc(title: cstring, hint: cstring) {
 	windowSize := ui.windowSizeF()
 	height := PROMPT_ROW * 2 + UI_SPACING * 3
 	box := rl.Rectangle {
@@ -49,9 +55,9 @@ drawLeavePrompt :: proc() {
 
 	x := box.x + UI_SPACING * 2
 	y := box.y + UI_SPACING
-	rl.DrawTextEx(vcrFont, "LEAVE THE GAME?", { x, y + (PROMPT_ROW - FONT_SIZE) * .5 }, FONT_SIZE, FONT_SPACING, rl.YELLOW)
+	rl.DrawTextEx(vcrFont, title, { x, y + (PROMPT_ROW - FONT_SIZE) * .5 }, FONT_SIZE, FONT_SPACING, rl.YELLOW)
 	y += PROMPT_ROW + UI_SPACING
-	rl.DrawTextEx(vcrFont, "ENTER TO LEAVE, ESC TO STAY", { x, y + (PROMPT_ROW - FONT_SIZE) * .5 }, FONT_SIZE, FONT_SPACING, HINT_COLOR)
+	rl.DrawTextEx(vcrFont, hint, { x, y + (PROMPT_ROW - FONT_SIZE) * .5 }, FONT_SIZE, FONT_SPACING, HINT_COLOR)
 }
 
 // --- team picker, shown before a team game starts ---

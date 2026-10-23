@@ -39,7 +39,7 @@ Refer to `config.toml.example` for config details
 ## Rules and Controls
 `MCV` can `dig` gold from adjacent tiles, `move`, and `build` new units, each costing 1 gold. can dig two tiles or build two units per turn, orders are added one after another. sees near, slow move, no shoot.
 `REC` can `move` fast and sees very far. no shoot.
-`GUN` is a static emplacement. can `indirekt fire` far, attacking three random tiles within radius. no move, can't see.
+`GUN` is a static emplacement. can `indirekt fire` far, attacking three random tiles within radius, destroyed after making eight shots. no move, can't see.
 `TONK` can `move`, and can `direkt fire`, attacking selected tile within range. can withstand an extra hit, medium move, medium see.
 
 An `MCV` destroyed while carrying gold leaves `scrap` that blocks its tile. Digging it gives one gold, any hit destroys it.
@@ -57,6 +57,8 @@ Games are free for all or team games: two teams of two, two teams of three or th
 - `[` / `]` lower and raise post effects intensity
 - `F1` opens settings, including post effects distortion, decoloration and CRT pixel size
 - Settings are saved per player name to `settings.toml` and restored on start, `--renderer` overrides the saved renderer
+- Game servers record every game under `replays/`. When a game ends the client asks whether to save the replay, into its own `replays/` folder, and then whether to watch it. Saved replays are also listed under `WATCH A REPLAY` in the lobby menu
+- In a replay, `Left`/`Right` step through the turns, `Space` toggles automatic playback, `Tab` switches between the players' views and the whole map, `Esc` leaves
 - `F2` switches between 2D and 3D renderers, the default is set with `renderer` in config.toml
 - `F12` saves a screenshot
 - Window is resizable

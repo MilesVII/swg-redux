@@ -298,6 +298,22 @@ drawGoldMarks :: proc(position: hex.Axial, gold: int, color := rl.GOLD) {
 	}
 }
 
+// a row of small ticks above the unit, one per shell, dim once spent
+drawAmmoMarks :: proc(position: hex.Axial, count: int, capacity: int, color := rl.ORANGE) {
+	if capacity <= 0 do return
+	invertedBasis := hex.BASIS_Y
+	invertedBasis.y *= -1
+	up := rl.Vector2Normalize(invertedBasis)
+	center := hex.axialToWorld(position) + up * .5
+	step := f32(.08)
+	start := center - rl.Vector2 { step * f32(capacity - 1) * .5, 0 }
+	spent := rl.Color { 60, 60, 60, 255 }
+	for i in 0..<capacity {
+		at := start + { step * f32(i), 0 }
+		drawLine(at - up * .06, at + up * .06, .04, i < count ? color : spent)
+	}
+}
+
 drawExplosion :: proc(at: hex.Axial, progress: f32, sweepShader: ^shaded.SweepShader) {
 	vx := hex.vertesex(at)
 

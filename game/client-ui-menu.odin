@@ -13,7 +13,7 @@ import "core:strings"
 import rl "vendor:raylib"
 
 @(private="file")
-MenuStatus :: enum { MAIN, NEW_GAME }
+MenuStatus :: enum { MAIN, NEW_GAME, REPLAYS }
 
 @(private="file")
 MenuState :: struct {
@@ -39,13 +39,14 @@ drawMenu :: proc() {
 	switch menuState.status {
 		case .MAIN: drawMain()
 		case .NEW_GAME: drawNGRMenu()
+		case .REPLAYS: drawReplaysMenu()
 	}
 }
 
 @(private="file")
 drawMain :: proc() {
-	// two fixed items, then sessions or the placeholder
-	menuNavigation(2 + max(1, len(menuState.sessions)))
+	// three fixed items, then sessions or the placeholder
+	menuNavigation(3 + max(1, len(menuState.sessions)))
 
 	if rl.IsKeyPressed(.ENTER) {
 		rl.PlaySound(menuSound)
@@ -63,8 +64,12 @@ drawMain :: proc() {
 					clientState.serverSocket,
 					&message
 				)
+			case 2:
+				refreshReplayFiles()
+				menuState.status = .REPLAYS
+				menuState.index = 0
 			case:
-				sessionIndex := menuState.index - 2
+				sessionIndex := menuState.index - 3
 				if sessionIndex < 0 || sessionIndex >= len(menuState.sessions) do break
 				joinLobbyGame(menuState.sessions[sessionIndex].port)
 		}
@@ -72,6 +77,7 @@ drawMain :: proc() {
 
 	drawItemButton("REQUEST A NEW GAME", 0, menuState.ngrSent ? rl.GRAY : rl.WHITE)
 	drawItemButton("REFRESH SESSION LIST", 1)
+	drawItemButton("WATCH A REPLAY", 2)
 	for session, i in menuState.sessions {
 		drawItemButton(
 			fmt.tprintf(
@@ -84,13 +90,33 @@ drawMain :: proc() {
 				session.yours ? " [YOURS]" : "",
 				session.full ? " [IN PROGRESS]" : ""
 			),
-			i + 2
+			i + 3
 		)
 	}
 	if len(menuState.sessions) == 0 {
-		drawItemButton("<NO AVAILABLE SESSIONS FOUND>", 2)
+		drawItemButton("<NO AVAILABLE SESSIONS FOUND>", 3)
 	}
 	drawSelectorBullet({100, 100}, 20)
+}
+
+// saved replays, newest first
+@(private="file")
+drawReplaysMenu :: proc() {
+	menuNavigation(1 + max(1, len(replay.files)))
+
+	if rl.IsKeyPressed(.ENTER) {
+		rl.PlaySound(menuSound)
+		if menuState.index == 0 {
+			menuState.status = .MAIN
+			menuState.index = 2
+		} else if menuState.index - 1 < len(replay.files) {
+			startReplayFromFile(replayFilePath(menuState.index - 1))
+		}
+	}
+
+	drawItemButton("< BACK", 0)
+	for file, i in replay.files do drawItemButton(replayFileLabel(file), i + 1)
+	if len(replay.files) == 0 do drawItemButton("<NO REPLAYS FOUND>", 1)
 }
 
 // the setups a game can be requested with, see teamSetupAllowed

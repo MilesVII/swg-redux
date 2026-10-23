@@ -478,9 +478,9 @@ drawScraps3D :: proc() {
 
 // slots of the bars above units: gold for MCVs, hit points for TONKs
 @(private="file")
-BAR_CAPACITY := [GameUnitType]int { .TONK = 2, .GUN = 0, .MCV = 3, .REC = 0 }
+BAR_CAPACITY := [GameUnitType]int { .TONK = 2, .GUN = GUN_SHELLS, .MCV = 3, .REC = 0 }
 @(private="file")
-BAR_COLOR := [GameUnitType]rl.Color { .TONK = rl.RED, .GUN = rl.BLANK, .MCV = rl.GOLD, .REC = rl.BLANK }
+BAR_COLOR := [GameUnitType]rl.Color { .TONK = rl.RED, .GUN = rl.ORANGE, .MCV = rl.GOLD, .REC = rl.BLANK }
 
 // screen space bars above units, drawn with the HUD
 drawUnitBars3D :: proc() {
@@ -501,7 +501,9 @@ drawUnitBars3D :: proc() {
 		if rl.Vector3DotProduct(anchor - camera3D.position, forward) <= 0 do continue
 		screen := rl.GetWorldToScreen(anchor, camera3D)
 
-		width := f32(capacity) * SEGMENT_WIDTH + f32(capacity - 1) * GAP
+		// a gun's eight shells get half-width segments
+		segmentWidth := v.type == .GUN ? SEGMENT_WIDTH * .5 : SEGMENT_WIDTH
+		width := f32(capacity) * segmentWidth + f32(capacity - 1) * GAP
 		x := math.round(screen.x - width * .5)
 		y := math.round(screen.y - SEGMENT_HEIGHT)
 		alpha := u8(255 * coverage)
@@ -514,7 +516,7 @@ drawUnitBars3D :: proc() {
 		filled.a = alpha
 		empty := rl.Color { 70, 70, 70, alpha }
 		for i in 0..<capacity {
-			segment := rl.Rectangle { x + f32(i) * (SEGMENT_WIDTH + GAP), y, SEGMENT_WIDTH, SEGMENT_HEIGHT }
+			segment := rl.Rectangle { x + f32(i) * (segmentWidth + GAP), y, segmentWidth, SEGMENT_HEIGHT }
 			rl.DrawRectangleRec(segment, i < v.gold ? filled : empty)
 		}
 	}

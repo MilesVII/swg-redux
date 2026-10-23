@@ -182,6 +182,7 @@ processPackage :: proc(p: networking.Package) {
 			header := networking.MessageHeader { message = .PING }
 			networking.say(p.socket, &header)
 		case .TEAM:
+		case .REPLAY_REQUEST, .REPLAY:
 		case .DIAL_FAILED:
 		case .JOIN:
 		case .CONNECTED:

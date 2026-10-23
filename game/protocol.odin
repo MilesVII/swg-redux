@@ -41,7 +41,116 @@ Update :: struct {
 	// per slot, "" while empty
 	playerNames: []string,
 	// per slot, whether the player confirmed their team; only team games wait for it
-	playersReady: []bool
+	playersReady: []bool,
+	// the server has a replay of the finished game, see REPLAY_REQUEST
+	replayAvailable: bool
+}
+
+// everything a replay needs to run the game again: the same map and the same orders
+// with the same random seeds give the same game, see rules.odin
+REPLAY_VERSION :: 1
+Replay :: struct {
+	version: int,
+	radius: int,
+	playerCount: int,
+	teamSize: int,
+	seed: i64,
+	// per slot
+	names: []string,
+	turns: []ReplayTurn
+}
+ReplayTurn :: struct {
+	player: int,
+	// random seed the orders ran with
+	seed: u64,
+	orders: OrderSet
+}
+// a replay as sent to clients
+ReplayFile :: struct {
+	name: string,
+	data: []u8
+}
+
+deleteReplay :: proc(replay: ^Replay) {
+	for name in replay.names do delete(name)
+	delete(replay.names)
+	for &turn in replay.turns do delete(turn.orders)
+	delete(replay.turns)
+	replay^ = {}
+}
+
+// what an update is built from, see encodeUpdate; the server and the replay player both have one
+UpdateSource :: struct {
+	game: ^GameState,
+	playerIndex: int,
+	activePlayer: int,
+	started: bool,
+	over: bool,
+	// the whole map regardless of fog, for replays
+	revealAll: bool,
+	explosions: []ExplosionBufferEntry,
+	names: []string,
+	ready: []bool,
+	activeName: string,
+	winnerName: string,
+	winnerTeam: int,
+	turnLimit: f32,
+	turnTimeLeft: f32,
+	replayAvailable: bool
+}
+
+// the update for one player, encoded; `sentCells` is what that player already has
+// and is brought up to date, nil sends the whole map
+encodeUpdate :: proc(src: UpdateSource, sentCells: ^[]hex.GridCell) -> []u8 {
+	// explosions are filtered by what the player sees, even once the whole map is revealed
+	visibleState := getStateForPlayer(src.game, src.playerIndex)
+	defer deleteState(visibleState)
+	reducedState := src.over || src.revealAll ? src.game^ : visibleState
+	explosions := reduceExplosionsToVisible(&visibleState, src.playerIndex, src.explosions)
+	defer delete(explosions)
+
+	cells := reducedState.grid.cells
+	fullGrid := sentCells^ == nil || len(sentCells^) != len(cells)
+	packedCells := packCellChanges(cells, fullGrid ? nil : sentCells^)
+	defer delete(packedCells)
+
+	if fullGrid {
+		delete(sentCells^)
+		sentCells^ = make([]hex.GridCell, len(cells))
+	}
+	for cell, i in cells do sentCells^[i] = cell.value
+
+	// units only, explored cells of other players are none of the receiver's business
+	players := make([]PlayerState, len(reducedState.players), context.temp_allocator)
+	for p, i in reducedState.players {
+		players[i] = PlayerState { color = p.color, units = p.units, unitIdCounter = p.unitIdCounter }
+	}
+
+	update := Update {
+		radius = reducedState.grid.radius,
+		fullGrid = fullGrid,
+		cells = packedCells,
+		players = players,
+		meta = {
+			activePlayer = src.activePlayer,
+			activeIsYou = src.playerIndex == src.activePlayer,
+			yourColor = src.game.players[src.playerIndex].color,
+			yourId = src.playerIndex,
+			currentPlayerBadge = src.activeName,
+			turnLimit = src.turnLimit,
+			turnTimeLeft = src.turnTimeLeft
+		},
+		explosions = explosions[:],
+		gameStarted = src.started,
+		gameOver = src.over,
+		teamSize = src.game.teamSize,
+		winnerBadge = src.winnerName,
+		winnerTeam = src.winnerTeam,
+		playerNames = src.names,
+		playersReady = src.ready,
+		replayAvailable = src.replayAvailable
+	}
+	return encode(update)
 }
 
 // a player's choice before a team game starts

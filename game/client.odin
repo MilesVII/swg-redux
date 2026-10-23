@@ -23,6 +23,8 @@ EXPLOSIONS_MAX_S := f32(10)
 EXPLOSION_MIN_GAP_S := f32(.05)
 // the hit sound varies this much around its normal pitch
 EXPLOSION_PITCH_RANGE := [2]f32 { .92, 1.08 }
+// losing a unit plays the frag sound this low
+LOSS_SOUND_PITCH :: f32(.64)
 @(private)
 FRAG_COUNTER_DISAPPEAR_S := f32(4.2)
 
@@ -234,6 +236,7 @@ AUTO_SUBMIT_LEAD :: 1.0
 // whether there's a game map to draw, the menus and connecting screens only show the backdrop
 @(private)
 showsGame :: proc() -> bool {
+	if replay.active do return true
 	#partial switch clientState.status {
 		case .NAMING, .CONNECTING_L, .LOBBY, .CONNECTING: return false
 	}
@@ -242,6 +245,7 @@ showsGame :: proc() -> bool {
 
 @(private)
 canPlanOrders :: proc() -> bool {
+	if replay.active do return false
 	return clientState.status == .PLAYING || clientState.status == .WAITING
 }
 
@@ -362,7 +366,8 @@ client :: proc(
 		handleClientHotkeys()
 
 		maintainConnection()
-		inputBlocked := settingsPanelHovered() || clientState.leavePrompt
+		updateReplay()
+		inputBlocked := settingsPanelHovered() || clientState.leavePrompt || replay.prompt != .NONE
 		utils.cursorHoverBegin()
 		activeView.update(!clientState.cameraControlsEnabled, inputBlocked)
 		updateExplosions()
@@ -412,7 +417,9 @@ startClientSession :: proc() {
 handleClientHotkeys :: proc() {
 	// esc leaves a game for the lobby: right away once it's over, after asking while it runs;
 	// with a unit selected it belongs to the ABORT button
-	if clientState.leavePrompt {
+	if replay.active || replayPromptKeys() {
+		// replays and replay prompts take these keys, see client-replay.odin
+	} else if clientState.leavePrompt {
 		if rl.IsKeyPressed(.ENTER) || rl.IsKeyPressed(.KP_ENTER) do leaveToLobby()
 		else if rl.IsKeyPressed(.ESCAPE) do clientState.leavePrompt = false
 	} else if rl.IsKeyPressed(.ESCAPE) && canLeaveToLobby() && getSelectedUnit() == nil {
@@ -516,6 +523,7 @@ updateExplosions :: proc() {
 		if onGrid && !bonk.bonked && bonk.elapsedTime > EXPLOSION_HATTRICK_S {
 			bonk.bonked = true
 			if bonk.highlight && bonk.lethal {
+				rl.SetSoundPitch(fragSound, 1)
 				rl.PlaySound(fragSound)
 				clientState.fragCounter += 1
 			}
@@ -524,7 +532,14 @@ updateExplosions :: proc() {
 			if found {
 				unit := &clientState.game.players[pix].units[uix]
 				if unit.type == .TONK && unit.gold > 1 do unit.gold -= 1
-				else do unordered_remove(&clientState.game.players[pix].units, uix)
+				else {
+					unordered_remove(&clientState.game.players[pix].units, uix)
+					// one of yours is gone
+					if pix == clientState.myPix && !(bonk.highlight && bonk.lethal) {
+						rl.SetSoundPitch(fragSound, LOSS_SOUND_PITCH)
+						rl.PlaySound(fragSound)
+					}
+				}
 			}
 		}
 		if bonk.elapsedTime < bonk.gap do break
@@ -635,12 +650,17 @@ joinLobbyGame :: proc(port: int) {
 }
 
 @(private)
+lobbyAvailable :: proc() -> bool {
+	return session.lobbyEnabled
+}
+
+@(private)
 canLeaveToLobby :: proc() -> bool {
 	return session.lobbyEnabled && clientState.target == .SERVER
 }
 
 // forgets everything about the current game
-@(private="file")
+@(private)
 resetGameState :: proc() {
 	if clientUpdateAnimationsPending {
 		deleteState(clientPendingState)
@@ -671,6 +691,8 @@ resetGameState :: proc() {
 	clientState.fragCounter = 0
 	clientState.fragCounterTTS = 0
 	clientState.leavePrompt = false
+	replay.prompt = .NONE
+	replay.promptedFor = false
 }
 
 // takes ownership of a heap string, copies literals
@@ -705,7 +727,9 @@ processPackage :: proc(p: networking.Package) {
 	switch p.header.message {
 		case .CONNECTED, .DIAL_FAILED:
 		case .PING:
-		case .TEAM:
+		case .TEAM, .REPLAY_REQUEST:
+		case .REPLAY:
+			onReplayReceived(p.payload)
 		case .DISCONNECTED:
 			clientState.connection = 0
 			// a finished game has nothing to come back to
@@ -721,19 +745,20 @@ processPackage :: proc(p: networking.Package) {
 			// lobby only sends notices when a game request failed
 			if clientState.status == .LOBBY do menuState.ngrSent = false
 		case .JOIN:
-			// lobby offers session list
+			// lobby offers session list; a replay keeps playing meanwhile
 			if clientState.target != .LOBBY do break
-			clientState.status = .LOBBY
+			if !replay.active do clientState.status = .LOBBY
 			clearSessions()
 			if !decode(p.payload, &menuState.sessions) do clearSessions()
 		case .UPDATE:
-			// game update from server
+			// game update from server, not while a replay plays over it
+			if replay.active do break
 			onUpdate(p.payload)
 		case .ORDERS: // ignored
 	}
 }
 
-@(private="file")
+@(private)
 onUpdate :: proc(payload: []u8) {
 	// finish whatever the previous update was still animating,
 	// its explosions must not replay against the new state
@@ -906,6 +931,8 @@ promoteStatusChange :: proc() {
 	}
 	// keeps a placement that's in progress
 	if canPlanOrders() && clientState.uiState == .DISABLED do clientState.uiState = .FREE
+
+	if clientState.status == .FINISH do offerReplayIfNew(clientUpdateBuffer.replayAvailable)
 }
 
 // without an MCV a player is out, their turns are skipped by the server

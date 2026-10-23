@@ -404,6 +404,7 @@ clientDrawHUD :: proc() {
 		return fmt.ctprintf(teams ? "GAME OVER, TEAM %s WON" : "GAME OVER, PLAYER %s WON", clientState.winnerName)
 	}
 	getStatusString :: proc() -> (cstring, rl.Color) {
+		if replay.active do return replayStatus(), rl.WHITE
 		switch clientState.status {
 			case .NAMING:       return "", rl.WHITE
 			case .CONNECTING_L: return "CONNECTING TO LOBBY", rl.WHITE
@@ -448,7 +449,14 @@ clientDrawHUD :: proc() {
 		)
 		hintRow += 1
 	}
-	if clientState.status == .FINISH && canLeaveToLobby() {
+	if replay.active {
+		rl.DrawTextEx(
+			vcrFont,
+			replayHint(),
+			UI_CORNER_PAD + { 0, (UI_SPACING + FONT_SIZE) * hintRow },
+			FONT_SIZE, FONT_SPACING, rl.WHITE
+		)
+	} else if clientState.status == .FINISH && canLeaveToLobby() {
 		rl.DrawTextEx(
 			vcrFont,
 			"ESC TO RETURN TO LOBBY",
@@ -467,6 +475,10 @@ clientDrawHUD :: proc() {
 
 	if clientState.leavePrompt {
 		drawLeavePrompt()
+		return
+	}
+	if replay.prompt != .NONE {
+		drawReplayPrompt()
 		return
 	}
 	if clientState.status == .TEAMS do drawTeamPicker()

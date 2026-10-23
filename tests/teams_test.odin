@@ -10,6 +10,7 @@ createPlayableGame :: proc(players: int, teamSize: int) -> (game.GameState, bool
 	for seed in 1..=30 {
 		state, err := game.createGame(players, 8, i64(seed), teamSize)
 		if err == .OK do return state, true
+		game.deleteState(state)
 	}
 	return {}, false
 }

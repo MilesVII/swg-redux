@@ -1,15 +1,23 @@
 package game
 
 import "core:slice"
+import "core:math/rand"
 
 import "hex"
 import "utils"
 
 // game rules on any state, so the server and tests share them
 
-// orders run in unit id order so results don't depend on map iteration order
+// a gun comes with this many shells and is destroyed once they're spent
+GUN_SHELLS :: 8
+
+// orders run in unit id order so results don't depend on map iteration order;
+// `seed` drives the shell scatter, the same seed gives the same game again (replays)
 // units built during this turn can't act until the next one
-executeOrders :: proc(state: ^GameState, playerIx: int, orders: OrderSet, explosions: ^[dynamic]ExplosionBufferEntry) {
+executeOrders :: proc(state: ^GameState, playerIx: int, orders: OrderSet, explosions: ^[dynamic]ExplosionBufferEntry, seed: u64) {
+	randomState := rand.create(seed)
+	context.random_generator = rand.default_random_generator(&randomState)
+
 	idLimit := state.players[playerIx].unitIdCounter
 
 	unitIds := make([dynamic]int, 0, len(orders), context.temp_allocator)
@@ -24,6 +32,12 @@ executeOrders :: proc(state: ^GameState, playerIx: int, orders: OrderSet, explos
 		// only MCVs may queue, and only builds or only digs; anything else runs its first order
 		if len(queued) > 1 && !multipleOrdersAllowed(unit.type, queued) do queued = queued[:1]
 		for order in queued do executeOrder(state, playerIx, unitId, order, explosions)
+	}
+
+	// guns that fired their last shell are gone
+	units := &state.players[playerIx].units
+	for i := len(units) - 1; i >= 0; i -= 1 {
+		if units[i].type == .GUN && units[i].gold <= 0 do unordered_remove(units, i)
 	}
 }
 
@@ -43,7 +57,7 @@ executeOrder :: proc(state: ^GameState, playerIx: int, unitId: int, order: Order
 				position = order.target,
 				type = order.targetUnitType,
 				id = state.players[playerIx].unitIdCounter,
-				gold = order.targetUnitType == .TONK ? 2 : 0
+				gold = order.targetUnitType == .TONK ? 2 : (order.targetUnitType == .GUN ? GUN_SHELLS : 0)
 			}
 			// invalidates `unit`
 			append(&state.players[playerIx].units, newUnit)
@@ -61,10 +75,13 @@ executeOrder :: proc(state: ^GameState, playerIx: int, unitId: int, order: Order
 				side = -1
 			})
 		case .INDIREKT:
-			utils.shuffle(BONK_OFFSETS[:])
+			unit.gold -= 1
+			// a fresh copy every time, so the same seed always scatters the same way
+			offsets := BONK_OFFSETS
+			utils.shuffle(offsets[:])
 
 			for i in 0..<INDIREKT_BARRAGE_SIZE {
-				at := order.target + BONK_OFFSETS[i]
+				at := order.target + offsets[i]
 				append(explosions, ExplosionBufferEntry {
 					position = at,
 					pix = playerIx,
@@ -127,6 +144,7 @@ orderAllowed :: proc(state: ^GameState, unit: GameUnit, order: Order) -> bool {
 				hex.isVisible(grid, unit.position, target)
 		case .INDIREKT:
 			return unit.type == .GUN &&
+				unit.gold > 0 &&
 				distance <= ARANGE[.GUN]
 		case .MOVE:
 			if MOVING[unit.type] == 0 || target == unit.position do return false

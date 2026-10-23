@@ -54,7 +54,7 @@ mcv_builds_twice :: proc(t: ^testing.T) {
 	)
 	explosions: [dynamic]game.ExplosionBufferEntry
 
-	game.executeOrders(&state, 0, orders, &explosions)
+	game.executeOrders(&state, 0, orders, &explosions, 1)
 
 	testing.expect_value(t, len(state.players[0].units), 3)
 	mcv, _ := game.findUnitById(state.players[0].units[:], 1)
@@ -74,7 +74,7 @@ mixed_queue_runs_first_order :: proc(t: ^testing.T) {
 	)
 	explosions: [dynamic]game.ExplosionBufferEntry
 
-	game.executeOrders(&state, 0, orders, &explosions)
+	game.executeOrders(&state, 0, orders, &explosions, 1)
 
 	mcv, _ := game.findUnitById(state.players[0].units[:], 1)
 	testing.expect_value(t, len(state.players[0].units), 2)
@@ -127,7 +127,7 @@ digging_scrap_pays_one_gold :: proc(t: ^testing.T) {
 	orders[1] = queue({ type = .DIG, target = { 1, 0 } })
 	explosions: [dynamic]game.ExplosionBufferEntry
 
-	game.executeOrders(&state, 0, orders, &explosions)
+	game.executeOrders(&state, 0, orders, &explosions, 1)
 
 	mcv, _ := game.findUnitById(state.players[0].units[:], 1)
 	testing.expect_value(t, mcv.gold, 2)
@@ -155,12 +155,12 @@ shells_tell_the_side_they_came_from :: proc(t: ^testing.T) {
 	context.allocator = context.temp_allocator
 	state := makeState(2)
 	gunAt := hex.Axial { -3, 0 }
-	addUnit(&state, 0, 1, .GUN, gunAt)
+	addUnit(&state, 0, 1, .GUN, gunAt, game.GUN_SHELLS)
 	orders := make(game.OrderSet)
 	orders[1] = queue({ type = .INDIREKT, target = { 3, 0 } })
 	explosions: [dynamic]game.ExplosionBufferEntry
 
-	game.executeOrders(&state, 0, orders, &explosions)
+	game.executeOrders(&state, 0, orders, &explosions, 1)
 
 	testing.expect_value(t, len(explosions), game.INDIREKT_BARRAGE_SIZE)
 	for bonk in explosions {

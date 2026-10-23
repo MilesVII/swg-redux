@@ -67,7 +67,13 @@ GameState :: struct {
 	players: []PlayerState,
 	grid: GameGrid,
 	// players per team, 1 for free for all; player i is on team i / teamSize
-	teamSize: int
+	teamSize: int,
+	// the map's seed, for replays
+	seed: i64
+}
+
+replaySeedOf :: proc(state: GameState) -> i64 {
+	return state.seed
 }
 
 teamOf :: proc(state: ^GameState, pix: int) -> int {
@@ -175,7 +181,8 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0), teamSize :=
 	state := GameState {
 		grid = hex.grid(mapRadius, hex.GridCell),
 		players = make([]PlayerState, playerCount),
-		teamSize = max(teamSize, 1)
+		teamSize = max(teamSize, 1),
+		seed = seed
 	}
 
 	for &cell in state.grid.cells {
@@ -390,6 +397,7 @@ drawUnit :: proc(position: hex.Axial, unit: GameUnitType, gold: int, color: rl.C
 	switch unit {
 		case .GUN:
 			ui.drawTriangle(position, true, color, .7)
+			ui.drawAmmoMarks(position, gold, GUN_SHELLS, rl.ORANGE)
 		case .TONK:
 			ui.drawTriangle(position, false, color, .7)
 			ui.drawGoldMarks(position, gold, rl.RED)
