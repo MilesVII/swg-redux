@@ -58,7 +58,7 @@ Games are free for all or team games: two teams of two, two teams of three or th
 - `F1` opens settings, including post effects distortion, decoloration and CRT pixel size
 - Settings are saved per player name to `settings.toml` and restored on start, `--renderer` overrides the saved renderer
 - Game servers record every game under `replays/`. When a game ends the client asks whether to save the replay, into its own `replays/` folder, and then whether to watch it. Saved replays are also listed under `WATCH A REPLAY` in the lobby menu
-- In a replay, `Left`/`Right` step through the turns, `Space` toggles automatic playback, `Tab` switches between the players' views and the whole map, `Esc` leaves
+- A replay shows the whole map without fog of war, every player's moves included. `Left`/`Right` step through the turns, `Space` toggles automatic playback, `Esc` leaves
 - `F2` switches between 2D and 3D renderers, the default is set with `renderer` in config.toml
 - `F12` saves a screenshot
 - Window is resizable

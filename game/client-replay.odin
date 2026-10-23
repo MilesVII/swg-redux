@@ -12,7 +12,8 @@ import "utils"
 import "networking"
 
 // watching a replay: the game is run again turn by turn and each turn is fed to the client
-// as if the server had sent it, so it looks like a game being played
+// as if the server had sent it, so it looks like a game being played; the whole map is shown,
+// no fog of war, and the client stands in for whoever made the last turn's orders
 
 REPLAYS_DIR :: "replays"
 // seconds between turns when a replay plays by itself, after the explosions have landed
@@ -26,8 +27,6 @@ replay: struct {
 	game: GameState,
 	// turns applied so far
 	turn: int,
-	// whose fog of war is shown, -1 for the whole map
-	viewer: int,
 	auto: bool,
 	nextAt: f64,
 	sentCells: []hex.GridCell,
@@ -52,10 +51,10 @@ startReplayFromFile :: proc(path: string) -> bool {
 		return false
 	}
 	defer delete(data)
-	return startReplayFromBytes(data, 0)
+	return startReplayFromBytes(data)
 }
 
-startReplayFromBytes :: proc(bytes: []u8, viewer: int) -> bool {
+startReplayFromBytes :: proc(bytes: []u8) -> bool {
 	parsed: Replay
 	if !decode(bytes, &parsed) || parsed.version != REPLAY_VERSION || len(parsed.turns) == 0 {
 		deleteReplay(&parsed)
@@ -75,11 +74,9 @@ startReplayFromBytes :: proc(bytes: []u8, viewer: int) -> bool {
 	replay.data = parsed
 	replay.game = game
 	replay.turn = 0
-	replay.viewer = clamp(viewer, 0, parsed.playerCount - 1)
 	replay.auto = true
 	replay.prompt = .NONE
 	clientFirstUpdate = true
-	refreshReplayIntel()
 	feedReplayTurn(nil)
 	replay.nextAt = rl.GetTime() + REPLAY_AUTO_DELAY_S
 	return true
@@ -115,15 +112,6 @@ stopReplay :: proc() {
 
 // --- running it ---
 
-// every player's memory of the map is kept current, so switching the viewer stays consistent
-@(private="file")
-refreshReplayIntel :: proc() {
-	for _, pix in replay.game.players {
-		seen := getStateForPlayer(&replay.game, pix)
-		deleteState(seen)
-	}
-}
-
 // hands the current replay state to the client like a server update
 @(private="file")
 feedReplayTurn :: proc(explosions: []ExplosionBufferEntry) {
@@ -144,21 +132,19 @@ feedReplayTurn :: proc(explosions: []ExplosionBufferEntry) {
 		}
 	}
 
-	viewer := max(replay.viewer, 0)
-	// the viewer's own shots get muzzle blasts, like in a game
+	// the client plays the part of whoever made the orders just resolved,
+	// so their shots get muzzle blasts, like in a game
+	mover := replayActivePlayer(replay.data, max(replay.turn - 1, 0))
 	clear(&clientSentOrders)
-	if replay.turn > 0 {
-		last := replay.data.turns[replay.turn - 1]
-		if last.player == viewer do for unitId, list in last.orders do clientSentOrders[unitId] = list
-	}
+	if replay.turn > 0 do for unitId, list in replay.data.turns[replay.turn - 1].orders do clientSentOrders[unitId] = list
 
 	source := UpdateSource {
 		game = &replay.game,
-		playerIndex = viewer,
+		playerIndex = mover,
 		activePlayer = active,
 		started = true,
 		over = over,
-		revealAll = replay.viewer < 0,
+		revealAll = true,
 		explosions = explosions,
 		names = replay.data.names,
 		ready = ready,
@@ -177,7 +163,6 @@ replayForward :: proc() {
 	clear(&replay.explosions)
 	applyReplayTurn(&replay.game, replay.data.turns[replay.turn], &replay.explosions)
 	replay.turn += 1
-	refreshReplayIntel()
 	feedReplayTurn(replay.explosions[:])
 }
 
@@ -190,15 +175,6 @@ replayBack :: proc() {
 	deleteState(replay.game)
 	replay.game = game
 	replay.turn -= 1
-	refreshReplayIntel()
-	feedReplayTurn(nil)
-}
-
-@(private="file")
-switchReplayViewer :: proc() {
-	// every player, then the whole map
-	replay.viewer += 1
-	if replay.viewer >= replay.data.playerCount do replay.viewer = -1
 	feedReplayTurn(nil)
 }
 
@@ -216,7 +192,6 @@ updateReplay :: proc() {
 		replay.auto = !replay.auto
 		replay.nextAt = now + REPLAY_AUTO_DELAY_S
 	}
-	if rl.IsKeyPressed(.TAB) do switchReplayViewer()
 	if !animating && (rl.IsKeyPressed(.RIGHT) || rl.IsKeyPressedRepeat(.RIGHT)) {
 		replayForward()
 		replay.nextAt = now + REPLAY_AUTO_DELAY_S
@@ -236,6 +211,10 @@ updateReplay :: proc() {
 }
 
 replayStatus :: proc() -> cstring {
+	if clientUpdateAnimationsPending {
+		mover := replayActivePlayer(replay.data, max(replay.turn - 1, 0))
+		return fmt.ctprintf("REPLAY %d/%d, RESOLVING %s'S ORDERS", replay.turn, len(replay.data.turns), replay.data.names[mover])
+	}
 	if replay.turn >= len(replay.data.turns) {
 		if len(clientState.winnerName) == 0 do return fmt.ctprintf("REPLAY OVER, NOBODY SURVIVED")
 		return fmt.ctprintf("REPLAY OVER, %s WON", clientState.winnerName)
@@ -245,8 +224,7 @@ replayStatus :: proc() -> cstring {
 }
 
 replayHint :: proc() -> cstring {
-	view := replay.viewer < 0 ? "ALL" : replay.data.names[replay.viewer]
-	return fmt.ctprintf("LEFT/RIGHT TURNS, SPACE AUTO %s, TAB VIEW: %s, ESC EXIT", replay.auto ? "ON" : "OFF", view)
+	return fmt.ctprintf("LEFT/RIGHT TURNS, SPACE AUTO %s, ESC EXIT", replay.auto ? "ON" : "OFF")
 }
 
 // --- saving what the server offers ---
@@ -299,7 +277,7 @@ replayPromptKeys :: proc() -> bool {
 			networking.say(clientState.serverSocket, &header)
 			setNotice("WAITING FOR THE REPLAY")
 		case .WATCH:
-			startReplayFromBytes(replay.pendingData, clientState.myPix)
+			startReplayFromBytes(replay.pendingData)
 	}
 	return true
 }

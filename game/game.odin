@@ -324,12 +324,14 @@ getStateForPlayer :: proc(state: ^GameState, playerIndex: int) -> GameState {
 	return reducedState
 }
 
-reduceExplosionsToVisible :: proc(reducedState: ^GameState, playerIx: int, explosions: []ExplosionBufferEntry) -> [dynamic]ExplosionBufferEntry {
+// own shells are marked with pix 1, everyone else's with -1 and the side they came from;
+// `revealAll` shows every shell as if it were the player's own
+reduceExplosionsToVisible :: proc(reducedState: ^GameState, playerIx: int, explosions: []ExplosionBufferEntry, revealAll := false) -> [dynamic]ExplosionBufferEntry {
 	redex: [dynamic]ExplosionBufferEntry
 
 	for bonk in explosions {
 		bonk := bonk
-		if (playerIx == bonk.pix) {
+		if playerIx == bonk.pix || revealAll {
 			bonk.pix = 1
 			bonk.side = -1
 			append(&redex, bonk)

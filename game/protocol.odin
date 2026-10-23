@@ -102,14 +102,21 @@ UpdateSource :: struct {
 // the update for one player, encoded; `sentCells` is what that player already has
 // and is brought up to date, nil sends the whole map
 encodeUpdate :: proc(src: UpdateSource, sentCells: ^[]hex.GridCell) -> []u8 {
-	// explosions are filtered by what the player sees, even once the whole map is revealed
-	visibleState := getStateForPlayer(src.game, src.playerIndex)
-	defer deleteState(visibleState)
+	// explosions are filtered by what the player sees, even once the whole map is revealed;
+	// a revealed replay shows everything and touches nobody's memory of the map
+	visibleState: GameState
+	if !src.revealAll do visibleState = getStateForPlayer(src.game, src.playerIndex)
+	defer if !src.revealAll do deleteState(visibleState)
 	reducedState := src.over || src.revealAll ? src.game^ : visibleState
-	explosions := reduceExplosionsToVisible(&visibleState, src.playerIndex, src.explosions)
+	explosions := reduceExplosionsToVisible(src.revealAll ? src.game : &visibleState, src.playerIndex, src.explosions, src.revealAll)
 	defer delete(explosions)
 
 	cells := reducedState.grid.cells
+	if src.revealAll {
+		// the game's own grid keeps its initial fog, a revealed map is observed everywhere
+		cells = slice.clone(cells, context.temp_allocator)
+		for &cell in cells do cell.value.fog = .OBSERVED
+	}
 	fullGrid := sentCells^ == nil || len(sentCells^) != len(cells)
 	packedCells := packCellChanges(cells, fullGrid ? nil : sentCells^)
 	defer delete(packedCells)
