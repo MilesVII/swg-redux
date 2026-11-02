@@ -5,9 +5,9 @@ import "core:testing"
 import "../game"
 import "../game/hex"
 
-// random maps can be too cramped for six spawns, so a few seeds are tried
+// random maps can be too cramped for six spawns or short of gold for six regions, so a lot of seeds are tried
 createPlayableGame :: proc(players: int, teamSize: int) -> (game.GameState, bool) {
-	for seed in 1..=30 {
+	for seed in 1..=120 {
 		state, err := game.createGame(players, 8, i64(seed), teamSize)
 		if err == .OK do return state, true
 		game.deleteState(state)

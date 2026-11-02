@@ -48,7 +48,7 @@ Update :: struct {
 
 // everything a replay needs to run the game again: the same map and the same orders
 // with the same random seeds give the same game, see rules.odin
-REPLAY_VERSION :: 1
+REPLAY_VERSION :: 2
 Replay :: struct {
 	version: int,
 	radius: int,

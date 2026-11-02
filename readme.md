@@ -21,6 +21,13 @@ odin build . -define:HEADLESS=true
 
 Game rules are covered by tests: `odin test tests`
 
+`tools/mapview` shows generated maps with their regions, gold and spawns for tinkering with the generator, and prints fairness statistics over many seeds:
+```
+odin build tools/mapview -out:build/mapview.exe
+build/mapview
+build/mapview --stats 200 --players 6
+```
+
 `manage.sh` runs a lobby deployment on Linux: it shows whether `/opt/swgr/swgr` (or `SWGR_EXE`) runs with its game servers, starts or stops it, and updates it with `git pull` and a headless build.
 
 Specify operating mode if needed:
@@ -46,6 +53,8 @@ Refer to `config.toml.example` for config details
 
 An `MCV` destroyed while carrying gold leaves `scrap` that blocks its tile. Digging it gives one gold, any hit destroys it.
 Enemy guns stay on the map once spotted, until their tile is seen empty or a shell lands on it.
+
+Gold lies in small clusters inside the mountain tiles bordering the plains. The map is split into regions, one per player around their spawn, and every region gets the same amount of gold, placed more densely towards the middle of the map, which is also a little flatter than the rest. Maps where a region falls short are generated again.
 Tiles hit by indirekt fire flash a red sector on the side the shells came from.
 Orders can be prepared while other players make theirs, they are submitted on your turn.
 Games can have a turn timer, set when requesting a game in a lobby or with `turn_time` in config.toml. When it runs out, the orders prepared so far are submitted.

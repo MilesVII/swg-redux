@@ -22,13 +22,18 @@ colors : [HEIGHTS]rl.Color = {
 	rl.GREEN,
 	rl.GREEN,
 	rl.GREEN,
-	rl.YELLOW,
+	MOUNTAIN_COLOR,
 	MOUNTAIN_COLOR,
 	MOUNTAIN_COLOR,
 	MOUNTAIN_COLOR
 }
 WALKABLE_LO :: 2
 WALKABLE_HI :: 6
+
+// the middle of the map is pulled towards the plains a little, so players meet on open
+// ground and their regions come out alike whatever the player count
+CENTER_FLATTEN :: .45
+PLAINS_ELEVATION :: .4
 
 GameGrid :: hex.Grid(hex.GridCell)
 
@@ -173,10 +178,24 @@ spawnSlots :: proc(playerCount: int, teamSize: int, allocator := context.allocat
 	return slots
 }
 
-GameInitError :: enum { OK, NO_SPAWNS }
+GameInitError :: enum { OK, NO_SPAWNS, UNFAIR_GOLD }
+
+// a game on a fresh map, or nothing and the reason the map was no good
 createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0), teamSize := 1) -> (GameState, GameInitError) {
+	state, err := generateMap(playerCount, mapRadius, seed, teamSize)
+	if err != .OK {
+		deleteState(state)
+		return {}, err
+	}
+	return state, .OK
+}
+
+// the map and the players on it; a map that failed is returned anyway so it can be looked at
+generateMap :: proc(playerCount: int, mapRadius: int, seed := i64(0), teamSize := 1) -> (GameState, GameInitError) {
 	seed := seed == -1 ? rand.int63() : seed
-	// fmt.println("using seed ", seed)
+	// gold placement draws from the seed, so the map is the same for a replay
+	randomState := rand.create(u64(seed))
+	context.random_generator = rand.default_random_generator(&randomState)
 
 	state := GameState {
 		grid = hex.grid(mapRadius, hex.GridCell),
@@ -187,16 +206,15 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0), teamSize :=
 
 	for &cell in state.grid.cells {
 		elevation := hex.elevation(cell.position.world, seed)
+		closeness := centerCloseness(cell.position.axial, mapRadius)
+		elevation += (PLAINS_ELEVATION - elevation) * CENTER_FLATTEN * closeness * closeness
 		hi := hex.heightLevel(elevation, HEIGHTS)
-		color := colors[hi]
-		goldCell := color == rl.YELLOW
 
 		cell.value = {
-			color = goldCell ? MOUNTAIN_COLOR : color,
+			color = colors[hi],
 			walkable = hi <= WALKABLE_HI && hi >= WALKABLE_LO,
 			seethrough = hi <= WALKABLE_HI,
 			fog = .FOG,
-			gold = goldCell ? 1 : 0,
 			elevation = elevation
 		}
 	}
@@ -206,17 +224,20 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0), teamSize :=
 	spawnPoints := findSpawnPoints(state.grid)
 	defer delete(spawnPoints)
 	if len(spawnPoints) < 6 { // stricter check to avoid cramped maps
-		delete(state.players)
-		delete(state.grid.cells)
 		return state, .NO_SPAWNS
 	}
 
 	slots := spawnSlots(playerCount, state.teamSize, context.temp_allocator)
+	spawns := make([]hex.Axial, playerCount, context.temp_allocator)
+	for &spawn, i in spawns do spawn = spawnPoints[SPAWN_RING[slots[i]]]
+	placed, fair := placeGold(state.grid, spawns, context.temp_allocator)
+	_ = placed
+
 	for &player, i in state.players {
 		units := []GameUnit {
 			GameUnit {
 				id = 0,
-				position = spawnPoints[SPAWN_RING[slots[i]]],
+				position = spawns[i],
 				type = .MCV,
 				gold = 2,
 				hidden = false
@@ -229,8 +250,8 @@ createGame :: proc(playerCount: int, mapRadius: int, seed := i64(0), teamSize :=
 			unitIdCounter = 1
 		}
 	}
-	
-	return state, .OK
+
+	return state, fair ? .OK : .UNFAIR_GOLD
 }
 
 // what the player sees: the whole team's units look, and the team's memory is shared
