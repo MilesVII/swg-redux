@@ -4,6 +4,7 @@ import rl "vendor:raylib"
 
 import "core:net"
 import "core:strings"
+import "core:math"
 import "core:math/rand"
 import synchan "core:sync/chan"
 
@@ -369,6 +370,7 @@ client :: proc(
 		updateReplay()
 		inputBlocked := settingsPanelHovered() || clientState.leavePrompt || replay.prompt != .NONE
 		utils.cursorHoverBegin()
+		updateCameraGlide()
 		activeView.update(!clientState.cameraControlsEnabled, inputBlocked)
 		updateExplosions()
 		pruneCounterBatterySigns()
@@ -679,6 +681,7 @@ resetGameState :: proc() {
 	clear(&counterBatterySigns)
 	clientFirstUpdate = true
 	selectedUnitId = NO_SELECTION
+	lastSelectedUnitId = NO_SELECTION
 	clientState.uiState = .DISABLED
 	clientState.cameraControlsEnabled = false
 
@@ -851,6 +854,35 @@ scheduleExplosions :: proc(explosions: []Explosion) {
 	if total <= budget do return
 	scale := budget / total
 	for &bonk in explosions do bonk.gap = max(bonk.gap * scale, EXPLOSION_MIN_GAP_S)
+}
+
+// the camera on its way to a unit picked with Tab, see cycleSelectedUnit
+@(private="file")
+cameraGlide: struct {
+	active: bool,
+	target: hex.Axial
+}
+// how fast the glide closes in, per second; most of the way is covered in a third of a second
+CAMERA_GLIDE_RATE :: 9
+
+glideCameraTo :: proc(at: hex.Axial) {
+	cameraGlide = { true, at }
+}
+
+// one frame of the glide, before the view applies the player's own camera input
+@(private="file")
+updateCameraGlide :: proc() {
+	if !cameraGlide.active do return
+	// the player taking the camera ends the glide
+	manual :=
+		rl.IsKeyDown(.W) || rl.IsKeyDown(.A) || rl.IsKeyDown(.S) || rl.IsKeyDown(.D) ||
+		rl.IsMouseButtonDown(.LEFT) || rl.GetMouseWheelMove() != 0
+	if manual {
+		cameraGlide.active = false
+		return
+	}
+	k := 1 - math.exp(-CAMERA_GLIDE_RATE * rl.GetFrameTime())
+	if activeView.glide(cameraGlide.target, k) do cameraGlide.active = false
 }
 
 @(private="file")

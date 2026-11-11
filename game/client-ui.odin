@@ -15,6 +15,9 @@ NO_SELECTION :: -1
 // id of one of your units; look it up every time, the state it points into gets replaced
 @(private)
 selectedUnitId := NO_SELECTION
+// the last unit that was selected, so Tab carries on from it once the selection is gone
+@(private)
+lastSelectedUnitId := NO_SELECTION
 
 @(private)
 getSelectedUnit :: proc() -> ^GameUnit {
@@ -227,6 +230,9 @@ clientPlanFrame :: proc(inputBlocked: bool) {
 	// the unit being ordered was destroyed meanwhile
 	if getSelectedUnit() == nil && clientState.uiState != .FREE do clientState.uiState = .FREE
 
+	if selectedUnitId != NO_SELECTION do lastSelectedUnitId = selectedUnitId
+	if !inputBlocked do cycleSelectedUnit()
+
 	if clientState.uiState == .FREE && !inputBlocked && clientState.myPix < len(clientState.game.players) {
 		for unit in clientState.game.players[clientState.myPix].units {
 			if unit.position != ui.pointedCell do continue
@@ -245,6 +251,28 @@ clientPlanFrame :: proc(inputBlocked: bool) {
 	if rl.IsMouseButtonReleased(.RIGHT) && getSelectedUnit() != nil {
 		if rl.Vector2Distance(rl.GetMousePosition(), rightPressPosition) < 6 do postponeGenericAction(abortOrderPlacement)
 	}
+}
+
+// Tab and Shift+Tab walk through your units, the camera follows the pick
+@(private="file")
+cycleSelectedUnit :: proc() {
+	if !(rl.IsKeyPressed(.TAB) || rl.IsKeyPressedRepeat(.TAB)) do return
+	if clientState.myPix < 0 || clientState.myPix >= len(clientState.game.players) do return
+	units := clientState.game.players[clientState.myPix].units
+	if len(units) == 0 do return
+
+	backwards := rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
+	// with nothing selected, carry on from the unit selected last, if it's still around
+	anchor := selectedUnitId != NO_SELECTION ? selectedUnitId : lastSelectedUnitId
+	current := -1
+	for unit, i in units do if unit.id == anchor do current = i
+	next: int
+	if current < 0 do next = backwards ? len(units) - 1 : 0
+	else do next = (current + (backwards ? len(units) - 1 : 1)) % len(units)
+
+	selectedUnitId = units[next].id
+	clientState.uiState = .FREE
+	glideCameraTo(units[next].position)
 }
 
 @(private="file")

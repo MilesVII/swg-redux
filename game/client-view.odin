@@ -19,6 +19,9 @@ ClientView :: struct {
 	scene: proc(),
 	// center the camera on a cell
 	focus: proc(at: hex.Axial),
+	// one step of a smooth move towards a cell, `k` is the share of the way to cover;
+	// returns true once the camera is there
+	glide: proc(at: hex.Axial, k: f32) -> bool,
 	// screen position of a cell, used by screen space effects
 	toScreen: proc(at: hex.Axial) -> rl.Vector2,
 	// explosion timeline hooks, see updateExplosions

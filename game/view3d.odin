@@ -16,6 +16,7 @@ VIEW_3D := ClientView {
 	update = update3D,
 	scene = scene3D,
 	focus = focus3D,
+	glide = glide3D,
 	toScreen = toScreen3D,
 	onExplosionStart = explosionStart3D,
 	onExplosionImpact = explosionImpact3D,
@@ -25,6 +26,18 @@ VIEW_3D := ClientView {
 }
 // hooks are named procedures: proc literals inside this global initializer
 // crashed the compiler (dev-2025-03) depending on where they sat in the file
+
+@(private="file")
+glide3D :: proc(at: hex.Axial, k: f32) -> bool {
+	world := hex.axialToWorld(at)
+	goal := rl.Vector3 { world.x, FOCUS_HEIGHT, world.y }
+	orbit.focus += (goal - orbit.focus) * k
+	if rl.Vector3Distance(orbit.focus, goal) < .02 {
+		orbit.focus = goal
+		return true
+	}
+	return false
+}
 
 @(private="file")
 focus3D :: proc(at: hex.Axial) {

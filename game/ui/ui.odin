@@ -405,6 +405,11 @@ Button :: struct {
 BUTTON_ROW_HOTKEYS := []rl.KeyboardKey {
 	.Z, .X, .C, .V, .B
 }
+// shown under the buttons
+@(private="file")
+BUTTON_ROW_HINTS := []cstring { "Z", "X", "C", "V", "B" }
+@(private="file")
+BUTTON_HINT_SIZE :: i32(10)
 
 buttonRow :: proc(
 	origin: rl.Vector2,
@@ -422,8 +427,9 @@ buttonRow :: proc(
 	y := f32(windowSize.y) - radius * 1.5
 
 	for butt, i in buttons {
+		x := xStart + xStep * f32(i)
 		hovered := button(
-			{ xStart + xStep * f32(i), y },
+			{ x, y },
 			radius,
 			butt.caption^,
 			colors,
@@ -433,5 +439,10 @@ buttonRow :: proc(
 			disabledColor
 		)
 		utils.setCursorHover(hovered)
+
+		// the key, just under the button
+		hint := BUTTON_ROW_HINTS[i]
+		hintWidth := rl.MeasureText(hint, BUTTON_HINT_SIZE)
+		rl.DrawText(hint, i32(x) - hintWidth / 2, i32(y + radius) + 2, BUTTON_HINT_SIZE, butt.disabled ? disabledColor : colors[1])
 	}
 }

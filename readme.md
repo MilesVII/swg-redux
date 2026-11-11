@@ -12,7 +12,7 @@ cp config.toml.example config.toml
 
 On Linux, odin links with `clang`, and the client needs X11 development files: `sudo apt install clang libx11-dev`
 
-On Windows, `odin build . -subsystem:windows` builds without a console window. Servers and lobbies from such a build print to the terminal they were started from, or open a console when started by double click.
+On Windows, `odin build . -subsystem:windows` builds without a console window. Servers and lobbies from such a build print to the terminal they were started from, or open a console when started by double click. Game servers a lobby starts are tied to it and go down with it, however it ends. `take-me-on-a-rocket-ride.bat` builds that way and starts a lobby in a window of its own plus two clients; closing the lobby window stops the lobby and its games.
 
 Servers and lobbies can be built without the client, which leaves out raylib, X11 and OpenGL:
 ```
@@ -79,7 +79,8 @@ Games are free for all or team games: two teams of two, two teams of three or th
 - Arrows / `WASD` and `Enter` to navigate menu, adjust parameters and select items
 
 ### In game
-- `Z/X/C/V` to pick order types
+- `Z/X/C/V/B` press the buttons of the bottom row, the keys are shown under them
+- `Tab` and `Shift+Tab` select the next or previous unit, the camera glides to it
 - `Enter` to submit orders
 - Hovering a unit shows its vision range in blue and attack range in red, so does placing an attack or picking a build site; a move preview shows the vision from the destination
 - `Esc` or right click to abort current order placement

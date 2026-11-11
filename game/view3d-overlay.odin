@@ -189,11 +189,12 @@ overlayPass :: proc(alpha: f32) {
 	cell, hovering := hoverCell.?
 	if hovering do overlayCellBorder3D(cell, .2, withAlpha(rl.WHITE, alpha))
 
-	// your units without orders, pulsing like in 2D
+	// your units without orders, pulsing like in 2D; the selected one gets a steady white border
 	pulse := (math.sin(utils.flicker * utils.TAU) + 1) * .5
 	for at in unitsAwaitingOrders3D() {
 		overlayCellBorder3D(at, .2, withAlpha(rl.YELLOW, pulse * alpha))
 	}
+	if selected := getSelectedUnit(); selected != nil do overlayCellBorder3D(selected.position, .2, withAlpha(rl.WHITE, alpha))
 
 	for command in overlays {
 		switch c in command {

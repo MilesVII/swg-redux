@@ -13,6 +13,7 @@ VIEW_2D := ClientView {
 	update = update2D,
 	scene = scene2D,
 	focus = focus2D,
+	glide = glide2D,
 	toScreen = toScreen2D,
 }
 
@@ -21,9 +22,27 @@ update2D :: proc(cameraLocked: bool, inputBlocked: bool) {
 	ui.update2DCamera(cameraLocked || inputBlocked)
 }
 
+// the camera target that puts a world point in the middle of the window;
+// panning moves the camera's offset, so the target alone doesn't say where the view is
+@(private="file")
+centeredTarget2D :: proc(world: rl.Vector2) -> rl.Vector2 {
+	return world - (ui.windowSizeF() * .5 - ui.camera.offset) / ui.camera.zoom
+}
+
 @(private="file")
 focus2D :: proc(at: hex.Axial) {
-	ui.camera.target = hex.axialToWorld(at)
+	ui.camera.target = centeredTarget2D(hex.axialToWorld(at))
+}
+
+@(private="file")
+glide2D :: proc(at: hex.Axial, k: f32) -> bool {
+	goal := centeredTarget2D(hex.axialToWorld(at))
+	ui.camera.target += (goal - ui.camera.target) * k
+	if rl.Vector2Distance(ui.camera.target, goal) * ui.camera.zoom < .5 {
+		ui.camera.target = goal
+		return true
+	}
+	return false
 }
 
 @(private="file")
@@ -54,7 +73,8 @@ scene2D :: proc() {
 	for &player, pix in clientState.game.players {
 		for &unit in player.units {
 			ordered := unit.id in clientState.orders
-			highlight := canPlanOrders() && pix == clientState.myPix && !ordered
+			// the selected unit gets a steady white border instead of the pulse
+			highlight := canPlanOrders() && pix == clientState.myPix && !ordered && unit.id != selectedUnitId
 			drawUnit(
 				unit.position,
 				unit.type,
@@ -65,6 +85,7 @@ scene2D :: proc() {
 			)
 		}
 	}
+	if selected := getSelectedUnit(); selected != nil do ui.drawCellBorder(selected.position, .2, rl.WHITE)
 
 	if clientUpdateAnimationsPending {
 		for bonk in clientState.explosions {

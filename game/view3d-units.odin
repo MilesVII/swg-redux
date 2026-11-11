@@ -553,7 +553,7 @@ unitsAwaitingOrders3D :: proc() -> []hex.Axial {
 	result := make([dynamic]hex.Axial, context.temp_allocator)
 	if !canPlanOrders() || clientState.myPix >= len(clientState.game.players) do return result[:]
 	for unit in clientState.game.players[clientState.myPix].units {
-		if !(unit.id in clientState.orders) do append(&result, unit.position)
+		if !(unit.id in clientState.orders) && unit.id != selectedUnitId do append(&result, unit.position)
 	}
 	return result[:]
 }

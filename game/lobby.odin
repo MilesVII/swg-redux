@@ -283,6 +283,8 @@ requestNewGame :: proc(p: networking.Package) {
 		sendNotice(p.socket, "LOBBY CAN'T START GAMES")
 		return
 	}
+	// the server goes down with the lobby, see children_windows.odin
+	if !bindChildToLobby(process) do fmt.println("game server isn't tied to the lobby, it may outlive it")
 
 	accepted = true
 	append(&lobbyState.sessions, Session {
