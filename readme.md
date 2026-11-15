@@ -14,6 +14,8 @@ On Linux, odin links with `clang`, and the client needs X11 development files: `
 
 On Windows, `odin build . -subsystem:windows` builds without a console window. Servers and lobbies from such a build print to the terminal they were started from, or open a console when started by double click. Game servers a lobby starts are tied to it and go down with it, however it ends. `take-me-on-a-rocket-ride.bat` builds that way and starts a lobby in a window of its own plus two clients; closing the lobby window stops the lobby and its games.
 
+`release.bat [version]` builds an optimized windowless client as `swgr.exe` and packs it with `assets`, `shaders` and the example config into `build\swgr-<version>.7z`, using 7-Zip from PATH or its usual install folder; the version defaults to the git short hash.
+
 Servers and lobbies can be built without the client, which leaves out raylib, X11 and OpenGL:
 ```
 odin build . -define:HEADLESS=true
